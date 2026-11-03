@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NIGHT_SHIFT.EXE</title>
+    <link rel="stylesheet" href="styles/os.css" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23000080'/%3E%3Ctext x='3' y='13' font-size='12' fill='%23ffb000'%3E%E2%98%BE%3C/text%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="app">
+      <section id="boot" class="screen" hidden></section>
+      <section id="clockin" class="screen" hidden></section>
+      <main id="desktop" hidden>
+        <div id="icons" tabindex="-1"></div>
+        <div id="windows"></div>
+        <div id="marquee" hidden></div>
+        <footer id="taskbar"></footer>
+        <div id="start-menu" hidden></div>
+      </main>
+      <div id="alert" hidden></div>
+      <div class="crt" aria-hidden="true"></div>
+    </div>
+    <noscript>NIGHT_SHIFT.EXE needs JavaScript. The night shift does not run itself.</noscript>
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
