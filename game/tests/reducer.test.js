@@ -117,6 +117,8 @@ test('selection: click, Shift+click range, Ctrl+click toggle', () => {
   assert.deepEqual(sel(s), []);
   s = reducer(s, actions.selectFile('desktop', 'a'));
   assert.deepEqual(sel(s), [], 'ignores files outside the folder');
+  const same = reducer(s, actions.selectFile('docs', null));
+  assert.equal(same, s, 'unchanged selection keeps the same state object');
 });
 
 test('select set and moving desktop icons', () => {

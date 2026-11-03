@@ -8,7 +8,7 @@ import { toHex } from '../logic/bits.js';
 const LOG_LIMIT = 100;
 const WINDOW_SIZES = {
   explorer: { w: 440, h: 300 },
-  viewer: { w: 520, h: 360 },
+  viewer: { w: 600, h: 380 },
   bitrot: { w: 500, h: 380 },
 };
 
@@ -61,9 +61,14 @@ const openFile = (state, id) => {
   return openWindow(state, 'viewer', id);
 };
 
+const sameSelection = (a, b) =>
+  a.folderId === b.folderId && a.anchorId === b.anchorId && a.ids.length === b.ids.length && a.ids.every((id, i) => id === b.ids[i]);
+
+const withSelection = (state, selection) => (sameSelection(state.selection, selection) ? state : { ...state, selection });
+
 const selectFile = (state, { folderId, id, shift, ctrl }) => {
   const sel = state.selection;
-  if (id == null) return { ...state, selection: { folderId, ids: [], anchorId: null } };
+  if (id == null) return withSelection(state, { folderId, ids: [], anchorId: null });
   if (!state.files[id] || state.files[id].parent !== folderId) return state;
   const sameFolder = sel.folderId === folderId;
   if (shift && sameFolder && sel.anchorId) {
@@ -72,13 +77,13 @@ const selectFile = (state, { folderId, id, shift, ctrl }) => {
     const b = order.indexOf(id);
     const range = order.slice(Math.min(a, b), Math.max(a, b) + 1);
     const ids = ctrl ? [...new Set([...sel.ids, ...range])] : range;
-    return { ...state, selection: { folderId, ids, anchorId: sel.anchorId } };
+    return withSelection(state, { folderId, ids, anchorId: sel.anchorId });
   }
   if (ctrl && sameFolder) {
     const ids = sel.ids.includes(id) ? sel.ids.filter((x) => x !== id) : [...sel.ids, id];
-    return { ...state, selection: { folderId, ids, anchorId: id } };
+    return withSelection(state, { folderId, ids, anchorId: id });
   }
-  return { ...state, selection: { folderId, ids: [id], anchorId: id } };
+  return withSelection(state, { folderId, ids: [id], anchorId: id });
 };
 
 const renameFile = (state, { id, name }) => {
@@ -170,7 +175,7 @@ export const reducer = (state, action) => {
 
     case T.SELECT_SET: {
       const ids = (action.ids ?? []).filter((id) => state.files[id]?.parent === action.folderId);
-      return { ...state, selection: { folderId: action.folderId, ids, anchorId: ids[0] ?? null } };
+      return withSelection(state, { folderId: action.folderId, ids, anchorId: ids[0] ?? null });
     }
 
     case T.MOVE_ICONS: {
