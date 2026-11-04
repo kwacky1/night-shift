@@ -7,9 +7,14 @@
   "license": "MIT",
   "scripts": {
     "start": "node scripts/serve.js",
-    "test": "node --test game/tests/"
+    "test": "node --test game/tests/ mcp/tests/",
+    "mcp": "node mcp/bin/night-shift-mcp.js",
+    "smoke": "node mcp/scripts/smoke.js"
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "workspaces": [
+    "mcp"
+  ]
 }
