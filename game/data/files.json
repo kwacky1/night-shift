@@ -1,0 +1,63 @@
+[
+  {
+    "id": "payroll",
+    "name": "PAYROLL.DAT",
+    "type": "data",
+    "locked": true,
+    "puzzleId": "payroll",
+    "content": [
+      "ACME DATAWORKS PTY LTD - PAYROLL EXTRACT - FORTNIGHT ENDING 31/10/1997",
+      "======================================================================",
+      "EMP#  NAME                 ROLE               STATUS",
+      "----  -------------------  -----------------  -----------------------",
+      "0042  K. FENWICK           ACCOUNTS           ACTIVE",
+      "0058  D. OKONKWO           SALES              ACTIVE",
+      "0091  R. PATTERSON         FACILITIES         ACTIVE",
+      "0117  [RECORD SEALED]      NIGHT SYSADMIN     TERMINATED 13/10/1997",
+      "0118  INTERN               NIGHT SYSADMIN     PROBATION",
+      "",
+      "NOTES:",
+      "  #0117  Final pay processed. Building access revoked 13/10/1997.",
+      "         Access log: badge #0117 swiped in at 22:00 tonight.",
+      "",
+      "  #0118  Start date 03/11/1997. Supervised by #0117.",
+      "",
+      "*** If you are reading this, you should not be here. ***"
+    ]
+  },
+  {
+    "id": "readme",
+    "name": "README.TXT",
+    "content": [
+      "WELCOME TO THE NIGHT SHIFT",
+      "",
+      "You are the only sysadmin on site between 22:00 and 06:00.",
+      "Keep the mainframe alive. Recover what you can.",
+      "",
+      "Some files have Bit Rot. Open them and line the bits back up",
+      "using SHIFT LEFT, SHIFT RIGHT and XOR. Every move costs you.",
+      "",
+      "TIPS",
+      "  Shift+click   select a range of files",
+      "  Ctrl+click    add or remove one file",
+      "  Shift+drag    move a group of desktop icons",
+      "  F2            rename the selected file",
+      "",
+      "Start with PAYROLL.DAT. Accounts says it has been 'acting up'.",
+      "",
+      "- Management"
+    ]
+  },
+  { "id": "drive", "name": "C_DRIVE", "type": "folder" },
+  { "id": "recycled", "name": "RECYCLED", "type": "folder" },
+
+  { "id": "autoexec", "name": "AUTOEXEC.BAT", "parent": "drive", "content": ["@ECHO OFF", "PROMPT $P$G", "PATH C:\\DOS;C:\\WINDOWS;C:\\ACME", "LH MOUSE.COM", "REM DO NOT REMOVE - #0117", "WIN"] },
+  { "id": "config", "name": "CONFIG.SYS", "parent": "drive", "content": ["DEVICE=C:\\DOS\\HIMEM.SYS", "DOS=HIGH,UMB", "FILES=40", "BUFFERS=20", "SHELL=C:\\NIGHT\\SHIFT.EXE /P"] },
+  { "id": "memos", "name": "MEMOS", "type": "folder", "parent": "drive" },
+  { "id": "memo1", "name": "MEMO_01.TXT", "parent": "memos", "content": ["TO: ALL STAFF", "RE: Restructure", "", "Effective immediately the night shift will be reduced to one", "sysadmin and one intern. The intern will be trained on the job.", "", "- Head Office, Brisbane"] },
+  { "id": "memo2", "name": "MEMO_02.TXT", "parent": "memos", "content": ["TO: NIGHT SYSADMIN", "RE: Mainframe power", "", "The backup generator is a manual gearbox unit. If it stalls,", "the mainframe goes down and takes the payroll run with it.", "Please do not let it stall. Again.", "", "- Facilities (R. Patterson)"] },
+  { "id": "memo3", "name": "MEMO_03.TXT", "parent": "memos", "content": ["TO: #0117", "RE: (no subject)", "", "We need to talk about what happened on the 12th.", "Not over email.", "", "- K"] },
+  { "id": "shiftlog", "name": "SHIFTLOG.BAK", "parent": "drive", "locked": true, "renameUnlock": "SHIFTLOG.TXT", "lockedMessage": "SHIFTLOG.BAK is a backup copy and cannot be opened.\n\nThe original SHIFTLOG.TXT seems to be missing.", "content": ["NIGHT SHIFT LOG", "", "12/10/1997 22:00  #0117 on. Generator ok.", "12/10/1997 01:13  Payroll batch modified from terminal NS-02.", "12/10/1997 01:14  #0117: 'that was not me'", "12/10/1997 03:40  Generator stalled. Mainframe down 26 min.", "13/10/1997 06:00  #0117 off.", "", "03/11/1997 22:00  #0117 on.  ??"] },
+
+  { "id": "trash1", "name": "RESUME.DOC", "parent": "recycled", "content": ["CURRICULUM VITAE", "", "Objective: to never work nights again."] }
+]

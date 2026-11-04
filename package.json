@@ -1,0 +1,15 @@
+{
+  "name": "night-shift",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NIGHT_SHIFT.EXE - a fake 1990s OS for GitHub Game Off 2026",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "test": "node --test game/tests/"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

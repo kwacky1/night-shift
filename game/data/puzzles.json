@@ -1,0 +1,15 @@
+[
+  {
+    "id": "payroll",
+    "title": "PAYROLL.DAT - sector 0x0117",
+    "hint": "Wipe the noise, lay down the mask, then nudge it into place.",
+    "start": "0x0003",
+    "target": "0x3C3C",
+    "moveLimit": 6,
+    "ops": [
+      { "type": "shl", "n": 1 },
+      { "type": "shr", "n": 3 },
+      { "type": "xor", "mask": "0x0F0F" }
+    ]
+  }
+]
