@@ -121,6 +121,12 @@ const boot = async () => {
 
   let saveEnabled = true;
   let saveTimer = null;
+  const saveNow = () => {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    if (saveEnabled && store.getState().phase === 'desktop') localStorage.setItem(SAVE_KEY, store.serialise());
+  };
+  window.addEventListener('pagehide', () => saveTimer && saveNow());
   store.subscribe((state, prev, action) => {
     render(state, prev);
     if (action.type === ActionTypes.CHAT_SEND && !action.actor && action.from !== 'intern') scriptedIntern(action.text);
@@ -128,7 +134,7 @@ const boot = async () => {
     if (chatOpen && unreadForPlayer(state) > 0) setTimeout(() => store.dispatch(actions.chatRead()), 0);
     if (state.phase !== 'desktop' || !saveEnabled) return;
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => saveEnabled && localStorage.setItem(SAVE_KEY, store.serialise()), 400);
+    saveTimer = setTimeout(saveNow, 400);
   });
 
   // The scripted fallback intern answers only when no real (MCP) intern is on the line.
