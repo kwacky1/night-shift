@@ -1,0 +1,80 @@
+{
+  "topics": [
+    {
+      "id": "key",
+      "keywords": ["key", "keys", "mask", "override", "password", "code", "ns-02", "ns02", "log", "logs", "system", "????", "badge"],
+      "requiresLevel": 2,
+      "lockedLines": [
+        "I can't open SYSTEM files. I'm on PROBATION. Fix PAYROLL.DAT and maybe Head Office will trust me with more than a stapler.",
+        "Still PROBATION. PAYROLL.DAT first. That's literally what the README says.",
+        "Access denied. My badge says INTERN in a font that really means it."
+      ],
+      "leaks": { "puzzle": "badge" },
+      "doneLine": "BADGE.DB is already open. I'm choosing to take credit for that.",
+      "lines": [
+        "What key? I'm an intern. I don't have keys. I have a lanyard.",
+        "There might be a log in a SYSTEM folder you can't see. Might. I'm not supposed to read it out.",
+        "It's NS-02.LOG. It says the key is 'read out per policy'. Nobody told me the policy. Ask again and I'll pretend I didn't hear.",
+        "Fine. FINE. It says: {{key}}. Hex, four digits. Type it into the key box on BADGE.DB and never tell Head Office.",
+        "I already told you: {{key}}. Hex. I'm writing it on my hand so one of us remembers."
+      ]
+    },
+    {
+      "id": "target",
+      "keywords": ["target", "pattern", "bits", "bit", "screen", "see", "look", "squares", "lights"],
+      "lines": [
+        "I can't see your screen. I'm on the other terminal. Describe it, I guess?",
+        "If you tell me which squares are lit I could do maths about it. Probably. I failed maths. Once.",
+        "Honestly the key matters more than the pattern. Ask me about the key."
+      ]
+    },
+    {
+      "id": "payroll",
+      "keywords": ["payroll", "payroll.dat", "salary", "pay", "bit rot", "bitrot", "corrupt", "corrupted"],
+      "lines": [
+        "PAYROLL.DAT? Accounts said it's 'acting up'. Accounts says that about the kettle.",
+        "The hint says wipe, mask, nudge. I'd read that as three moves in some order. Very helpful of me.",
+        "Try the XOR early. Or late. I'm an intern, not a fortune teller. There's an Undo button for a reason."
+      ]
+    },
+    {
+      "id": "who",
+      "keywords": ["who", "0117", "#0117", "supervisor", "ghost", "terminated", "name", "you"],
+      "lines": [
+        "I'm #0118. First night. They said #0117 would supervise me. Have you seen them? You're sitting at their desk.",
+        "#0117 was terminated last month according to payroll. But their badge swiped in at 22:00. So. That's fine. Totally fine.",
+        "I'd rather not talk about #0117. The lights flicker when I type it."
+      ]
+    },
+    {
+      "id": "help",
+      "keywords": ["help", "stuck", "how", "hint", "what do i do", "lost", "confused"],
+      "lines": [
+        "Have you tried turning it off and on again? Kidding. Open README.TXT.",
+        "Shift+click selects a range. F2 renames. Some backups only open if you give them the right name.",
+        "Corrupted files open in BITROT.EXE. Line the bits up. If a button says ????, it needs a key, and keys live in logs. Logs I can read. Hint hint."
+      ]
+    },
+    {
+      "id": "hello",
+      "keywords": ["hi", "hello", "hey", "g'day", "gday", "yo", "evening", "sup"],
+      "lines": [
+        "Hey. Is it always this quiet? The generator keeps making a noise like a sad cow.",
+        "Hi again. Still here. Still on probation.",
+        "Yes, hello. We've met. You're the one at the haunted desk."
+      ]
+    },
+    {
+      "id": "default",
+      "keywords": [],
+      "cycle": true,
+      "lines": [
+        "Sorry, was on smoko.",
+        "Hmm? I'll put that in a ticket.",
+        "Could you ask that as a question about keys, logs, payroll or #0117? I only did a six week course.",
+        "Noted. Filed. Lost. That's the ACME way.",
+        "My connection's dodgy. If you've got a real AI intern, plug it in. I'm just the scripted one."
+      ]
+    }
+  ]
+}
