@@ -13,7 +13,7 @@ const WINDOW_SIZES = {
   explorer: { w: 440, h: 300 },
   viewer: { w: 600, h: 380 },
   bitrot: { w: 500, h: 420 },
-  intern: { w: 380, h: 420 },
+  intern: { w: 380, h: 420, x: 680, y: 40 },
 };
 
 // 8.3 filenames, DOS style. Stored upper case.
@@ -60,8 +60,8 @@ const openWindow = (state, kind, fileId) => {
   if (existing) return focus(state, existing.id);
   const id = `w${state.nextWindowId}`;
   const offset = (state.nextWindowId - 1) % 8;
-  const size = WINDOW_SIZES[kind] ?? { w: 400, h: 300 };
-  const win = { id, kind, fileId, x: 140 + offset * 28, y: 40 + offset * 24, ...size, z: state.nextZ, minimised: false };
+  const { x = 140 + offset * 28, y = 40 + offset * 24, ...size } = WINDOW_SIZES[kind] ?? { w: 400, h: 300 };
+  const win = { id, kind, fileId, x, y, ...size, z: state.nextZ, minimised: false };
   return {
     ...state,
     windows: [...state.windows, win],

@@ -2,7 +2,7 @@
 // never in the reducer.
 import { createStore } from './core/store.js';
 import { reducer } from './core/reducer.js';
-import { actions } from './core/actions.js';
+import { actions, ActionTypes } from './core/actions.js';
 import { createInitialState, STATE_VERSION } from './core/initialState.js';
 import { $, ui } from './ui/dom.js';
 import { renderBoot, renderClockIn } from './ui/boot.js';
@@ -12,10 +12,14 @@ import { initTaskbar, renderAlert, renderTaskbar } from './ui/taskbar.js';
 import { explorerView } from './ui/explorer.js';
 import { viewerView } from './ui/viewer.js';
 import { bitrotView, bitrotKey } from './ui/bitrot.js';
+import { internView, DEFAULT_INTERN_URL } from './ui/intern.js';
 import { startRename } from './ui/rename.js';
-import { connectIntern, exposeApi } from './bridge/api.js';
+import { connectIntern, exposeApi, isLocalSocketUrl } from './bridge/api.js';
+import { fallbackReply } from './intern/fallback.js';
+import { unreadForPlayer } from './core/selectors.js';
 
 const SAVE_KEY = 'night-shift:save';
+const INTERN_URL_KEY = 'night-shift:intern-url';
 const TICK_MS = 1000; // one real second = one minute of night shift
 
 const loadJson = async (path) => {
@@ -34,7 +38,11 @@ const loadSave = () => {
 };
 
 const boot = async () => {
-  const [files, puzzles] = await Promise.all([loadJson('../data/files.json'), loadJson('../data/puzzles.json')]);
+  const [files, puzzles, internScript] = await Promise.all([
+    loadJson('../data/files.json'),
+    loadJson('../data/puzzles.json'),
+    loadJson('../data/intern.json'),
+  ]);
   const store = createStore(reducer, loadSave() ?? createInitialState({ files, puzzles }));
 
   const dom = {
@@ -61,6 +69,20 @@ const boot = async () => {
     renderAlert(dom.alert, state, prev, ctx);
   };
 
+  let bridge = null;
+  const savedUrl = () => {
+    try {
+      return localStorage.getItem(INTERN_URL_KEY);
+    } catch {
+      return null;
+    }
+  };
+  const setInternStatus = (status) => {
+    if (ui.internStatus === status) return;
+    ui.internStatus = status;
+    ctx.rerender();
+  };
+
   const ctx = {
     dispatch: store.dispatch,
     getState: store.getState,
@@ -70,23 +92,57 @@ const boot = async () => {
       saveEnabled = false;
       location.reload();
     },
+    intern: {
+      url: () => bridge?.url ?? savedUrl() ?? DEFAULT_INTERN_URL,
+      dial: (url) => {
+        bridge?.close();
+        bridge = connectIntern(url, store, setInternStatus);
+        if (!bridge) {
+          store.dispatch(actions.chatSend(`Refusing to dial ${url}. Only ws://localhost or ws://127.0.0.1 addresses are allowed.`, 'intern', { scripted: true }));
+          return;
+        }
+        localStorage.setItem(INTERN_URL_KEY, url);
+      },
+      hangUp: () => {
+        bridge?.close();
+        bridge = null;
+        localStorage.removeItem(INTERN_URL_KEY);
+      },
+    },
   };
 
   registerView('explorer', explorerView);
   registerView('viewer', viewerView);
   registerView('bitrot', bitrotView);
+  registerView('intern', internView);
   initDesktop(dom.icons, dom.marquee, ctx);
   initWindows(dom.windows, ctx);
   initTaskbar(dom.taskbar, dom.startMenu, ctx);
 
   let saveEnabled = true;
   let saveTimer = null;
-  store.subscribe((state, prev) => {
+  store.subscribe((state, prev, action) => {
     render(state, prev);
+    if (action.type === ActionTypes.CHAT_SEND && !action.actor && action.from !== 'intern') scriptedIntern(action.text);
+    const chatOpen = state.windows.some((w) => w.kind === 'intern' && !w.minimised);
+    if (chatOpen && unreadForPlayer(state) > 0) setTimeout(() => store.dispatch(actions.chatRead()), 0);
     if (state.phase !== 'desktop' || !saveEnabled) return;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => saveEnabled && localStorage.setItem(SAVE_KEY, store.serialise()), 400);
   });
+
+  // The scripted fallback intern answers only when no real (MCP) intern is on the line.
+  const scriptedIntern = (text) => {
+    if (ui.internStatus === 'online') return;
+    ui.internTyping = true;
+    ctx.rerender();
+    setTimeout(() => {
+      ui.internTyping = false;
+      if (ui.internStatus === 'online') return ctx.rerender();
+      const reply = fallbackReply(store.getState(), text, internScript);
+      store.dispatch(actions.chatSend(reply.text, 'intern', { scripted: true, topic: reply.topic }));
+    }, 700 + Math.random() * 900);
+  };
 
   setInterval(() => {
     const s = store.getState();
@@ -119,13 +175,8 @@ const boot = async () => {
   });
 
   exposeApi(store);
-  const internUrl = new URLSearchParams(location.search).get('intern');
-  if (internUrl) {
-    connectIntern(internUrl, store, (online) => {
-      ui.internOnline = online;
-      ctx.rerender();
-    });
-  }
+  const internUrl = new URLSearchParams(location.search).get('intern') ?? savedUrl();
+  if (internUrl && isLocalSocketUrl(internUrl)) ctx.intern.dial(internUrl);
 
   render(store.getState(), null);
 };

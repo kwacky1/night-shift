@@ -25,5 +25,6 @@ export const isDoubleDown = (key) => {
 export const ui = {
   renamingId: null,
   startMenuOpen: false,
-  internOnline: false,
+  internStatus: 'offline', // 'offline' | 'connecting' | 'online' (an MCP intern is on the bridge)
+  internTyping: false,
 };
