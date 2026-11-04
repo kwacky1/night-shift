@@ -10,6 +10,25 @@
       { "type": "shl", "n": 1 },
       { "type": "shr", "n": 3 },
       { "type": "xor", "mask": "0x0F0F" }
+    ],
+    "onSolve": {
+      "internLevel": 2,
+      "message": "Head Office: payroll recovered. Intern #0118 promoted to OPERATOR (XOR ops, SYSTEM files). Please supervise."
+    }
+  },
+  {
+    "id": "badge",
+    "title": "BADGE.DB - access control",
+    "hint": "You can see the pattern. You cannot see the key. Somebody on this shift can.",
+    "start": "0x0118",
+    "target": "0x0FF0",
+    "moveLimit": 6,
+    "playerHides": ["hex"],
+    "ops": [
+      { "type": "shl", "n": 4 },
+      { "type": "shr", "n": 1 },
+      { "type": "xor", "mask": "0xFF00" },
+      { "type": "xor", "mask": "0x0117", "keyed": true }
     ]
   }
 ]
