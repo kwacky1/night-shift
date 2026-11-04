@@ -1,8 +1,9 @@
 // Builds the starting state from plain data (data/files.json + data/puzzles.json).
 // The result is pure JSON: safe to serialise, save, send over a socket, and hydrate.
 import { normalisePuzzle } from '../logic/puzzle.js';
+import { START_LEVEL } from './permissions.js';
 
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2;
 export const SHIFT_LENGTH = 8 * 60;
 
 const ICON_W = 88;
@@ -25,13 +26,16 @@ export const createInitialState = ({ files = [], puzzles = [] } = {}) => {
       puzzleId: f.puzzleId ?? null,
       renameUnlock: f.renameUnlock ?? null,
       lockedMessage: f.lockedMessage ?? null,
+      hidden: Boolean(f.hidden),
+      minLevel: f.minLevel ?? 0,
+      app: f.app ?? null,
       content: textOf(f.content),
     };
   }
 
   const positions = {};
   files
-    .filter((f) => (f.parent ?? 'desktop') === 'desktop')
+    .filter((f) => (f.parent ?? 'desktop') === 'desktop' && !f.hidden)
     .forEach((f, i) => {
       positions[f.id] = f.pos ?? { x: 12 + Math.floor(i / DESKTOP_ROWS) * ICON_W, y: 12 + (i % DESKTOP_ROWS) * ICON_H };
     });
@@ -39,7 +43,7 @@ export const createInitialState = ({ files = [], puzzles = [] } = {}) => {
   const puzzleMap = {};
   for (const p of puzzles) {
     const def = normalisePuzzle(p);
-    puzzleMap[def.id] = { ...def, value: def.start, history: [], solved: false, failed: false };
+    puzzleMap[def.id] = { ...def, value: def.start, history: [], unlocked: [], solved: false, failed: false };
   }
 
   return {
@@ -57,5 +61,7 @@ export const createInitialState = ({ files = [], puzzles = [] } = {}) => {
     alert: null,
     flags: {},
     log: [],
+    // Intern #0118: permission level and the INTERN.EXE chat. pester counts drive the scripted fallback.
+    intern: { level: START_LEVEL, messages: [], nextMsgId: 1, playerReadId: 0, pester: {} },
   };
 };

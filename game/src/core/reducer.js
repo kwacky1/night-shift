@@ -2,14 +2,18 @@
 // Uses structural sharing so the UI can cheaply tell which slices changed.
 import { ActionTypes as T } from './actions.js';
 import { childrenOf, clockMinutes, formatClock, windowForFile } from './selectors.js';
-import { applyOp, isSolved, opLabel } from '../logic/puzzle.js';
-import { toHex } from '../logic/bits.js';
+import { applyOp, isSolved, opLabel, parseNumber } from '../logic/puzzle.js';
+import { toHex, toWord } from '../logic/bits.js';
+import { clampLevel, internActionError, internLevel, isOpUnlocked, levelInfo } from './permissions.js';
 
 const LOG_LIMIT = 100;
+const MESSAGE_LIMIT = 200;
+export const MESSAGE_MAX_LENGTH = 280;
 const WINDOW_SIZES = {
   explorer: { w: 440, h: 300 },
   viewer: { w: 600, h: 380 },
-  bitrot: { w: 500, h: 380 },
+  bitrot: { w: 500, h: 420 },
+  intern: { w: 380, h: 420 },
 };
 
 // 8.3 filenames, DOS style. Stored upper case.
@@ -21,6 +25,24 @@ const log = (state, text) => ({
 });
 
 const alert = (state, title, text) => ({ ...state, alert: { title, text } });
+
+// Append a line to the INTERN.EXE chat. from: 'player' | 'intern' | 'system'.
+const post = (state, from, text, extra = {}) => {
+  const intern = state.intern;
+  const msg = { id: intern.nextMsgId, from, at: formatClock(clockMinutes(state)), text, ...extra };
+  return {
+    ...state,
+    intern: { ...intern, messages: [...intern.messages, msg].slice(-MESSAGE_LIMIT), nextMsgId: intern.nextMsgId + 1 },
+  };
+};
+
+const setInternLevel = (state, level, message) => {
+  const next = clampLevel(level);
+  if (next <= internLevel(state)) return state;
+  const name = levelInfo(next).name;
+  const s = log({ ...state, intern: { ...state.intern, level: next } }, `Intern #0118 promoted to ${name}.`);
+  return post(s, 'system', message ?? `Head Office: intern #0118 is now ${name}. ${levelInfo(next).summary}`);
+};
 
 const updateFile = (state, id, patch) => ({ ...state, files: { ...state.files, [id]: { ...state.files[id], ...patch } } });
 
@@ -52,7 +74,9 @@ const openWindow = (state, kind, fileId) => {
 const openFile = (state, id) => {
   const file = state.files[id];
   if (!file) return state;
+  if (file.hidden) return alert(state, 'Open', `Cannot find '${id}'. Make sure the path and file name are correct.`);
   if (file.type === 'folder') return openWindow(state, 'explorer', id);
+  if (file.type === 'app' && file.app && WINDOW_SIZES[file.app]) return openWindow(state, file.app, id);
   if (file.locked && file.puzzleId && state.puzzles[file.puzzleId]) {
     const s = openWindow(state, 'bitrot', id);
     return s.flags[`seen:${id}`] ? s : log({ ...s, flags: { ...s.flags, [`seen:${id}`]: true } }, `${file.name} is corrupted. Bit Rot detected.`);
@@ -102,21 +126,58 @@ const renameFile = (state, { id, name }) => {
   return s;
 };
 
-const applyPuzzleOp = (state, { puzzleId, opIndex }) => {
+const applyPuzzleOp = (state, action) => {
+  const { puzzleId, opIndex } = action;
   const p = state.puzzles[puzzleId];
   const op = p?.ops[opIndex];
-  if (!p || !op || p.solved || p.failed) return state;
+  if (!p || !op || p.solved || p.failed || !isOpUnlocked(p, opIndex)) return state;
+  const byIntern = action.actor === 'intern';
+  if (byIntern && internActionError(state, action)) return state;
   const value = applyOp(p.value, op);
   const history = [...p.history, p.value];
   const solved = isSolved(value, p);
   const failed = !solved && history.length >= p.moveLimit;
   let s = updatePuzzle(state, puzzleId, { value, history, solved, failed });
+  const fileNames = Object.values(s.files).filter((f) => f.puzzleId === puzzleId);
+  if (byIntern) s = post(s, 'system', `#0118 applied ${opLabel(op)} to ${fileNames.map((f) => f.name).join(', ') || puzzleId}.`);
   if (solved) {
-    const unlocked = Object.values(s.files).filter((f) => f.puzzleId === puzzleId);
-    for (const f of unlocked) s = updateFile(s, f.id, { locked: false });
-    s = log(s, `Bit Rot cleared: ${unlocked.map((f) => f.name).join(', ') || puzzleId} recovered in ${history.length} moves.`);
+    for (const f of fileNames) s = updateFile(s, f.id, { locked: false });
+    s = log(s, `Bit Rot cleared: ${fileNames.map((f) => f.name).join(', ') || puzzleId} recovered in ${history.length} moves.`);
+    if (p.onSolve?.internLevel !== undefined) s = setInternLevel(s, p.onSolve.internLevel, p.onSolve.message);
   } else if (failed) {
     s = log(s, `${opLabel(op)} -> ${toHex(value)}. Out of moves. SECTOR LOST.`);
+  }
+  return s;
+};
+
+const enterKey = (state, action) => {
+  const p = state.puzzles[action.puzzleId];
+  const op = p?.ops[action.opIndex];
+  if (!p || !op?.keyed || p.solved || isOpUnlocked(p, action.opIndex)) return state;
+  if (action.actor === 'intern' && internActionError(state, action)) return state;
+  const who = action.actor === 'intern' ? '#0118' : 'Sysadmin';
+  const mask = parseNumber(action.mask);
+  if (!Number.isInteger(mask) || toWord(mask) !== op.mask || mask > 0xffff) {
+    const s = log(state, `${who} entered a bad key for ${p.id}.`);
+    return action.actor === 'intern' ? s : alert(s, 'BITROT.EXE', 'KEY REJECTED.\n\nThat is not the override key for this sector.');
+  }
+  let s = updatePuzzle(state, p.id, { unlocked: [...(p.unlocked ?? []), action.opIndex] });
+  s = log(s, `${who} entered the override key for ${p.id}.`);
+  return post(s, 'system', `Override key accepted for ${p.title ?? p.id}. ${opLabel(op)} unlocked.`);
+};
+
+const chatSend = (state, action) => {
+  const text = String(action.text ?? '').replace(/\s+/g, ' ').trim().slice(0, MESSAGE_MAX_LENGTH);
+  if (!text) return state;
+  const from = action.actor === 'intern' || action.from === 'intern' ? 'intern' : 'player';
+  const extra = {};
+  if (from === 'intern' && action.actor !== 'intern' && action.scripted) {
+    extra.scripted = true;
+  }
+  let s = post(state, from, text, extra);
+  if (extra.scripted && typeof action.topic === 'string') {
+    const pester = { ...s.intern.pester, [action.topic]: (s.intern.pester[action.topic] ?? 0) + 1 };
+    s = { ...s, intern: { ...s.intern, pester } };
   }
   return s;
 };
@@ -130,7 +191,9 @@ export const reducer = (state, action) => {
       return state.phase === 'boot' ? { ...state, phase: 'clockin' } : state;
 
     case T.CLOCK_IN:
-      return state.phase === 'clockin' ? log({ ...state, phase: 'desktop' }, 'Badge 0117 clocked in. Night shift started.') : state;
+      return state.phase === 'clockin'
+        ? post(log({ ...state, phase: 'desktop' }, 'Badge 0117 clocked in. Night shift started.'), 'system', 'Intern #0118 has joined the night shift.')
+        : state;
 
     case T.TICK: {
       if (state.phase !== 'desktop' || state.flags.shiftOver) return state;
@@ -203,6 +266,17 @@ export const reducer = (state, action) => {
       const p = state.puzzles[action.puzzleId];
       if (!p || p.solved) return state;
       return updatePuzzle(state, p.id, { value: p.start, history: [], failed: false });
+    }
+
+    case T.PUZZLE_ENTER_KEY:
+      return enterKey(state, action);
+
+    case T.CHAT_SEND:
+      return chatSend(state, action);
+
+    case T.CHAT_READ: {
+      const last = state.intern.nextMsgId - 1;
+      return state.intern.playerReadId === last ? state : { ...state, intern: { ...state.intern, playerReadId: last } };
     }
 
     case T.DISMISS_ALERT:

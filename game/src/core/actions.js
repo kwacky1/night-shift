@@ -18,6 +18,9 @@ export const ActionTypes = Object.freeze({
   PUZZLE_APPLY_OP: 'PUZZLE_APPLY_OP',
   PUZZLE_UNDO: 'PUZZLE_UNDO',
   PUZZLE_RESET: 'PUZZLE_RESET',
+  PUZZLE_ENTER_KEY: 'PUZZLE_ENTER_KEY',
+  CHAT_SEND: 'CHAT_SEND',
+  CHAT_READ: 'CHAT_READ',
   DISMISS_ALERT: 'DISMISS_ALERT',
 });
 
@@ -42,5 +45,9 @@ export const actions = Object.freeze({
   applyOp: (puzzleId, opIndex) => ({ type: T.PUZZLE_APPLY_OP, puzzleId, opIndex }),
   undo: (puzzleId) => ({ type: T.PUZZLE_UNDO, puzzleId }),
   resetPuzzle: (puzzleId) => ({ type: T.PUZZLE_RESET, puzzleId }),
+  enterKey: (puzzleId, opIndex, mask) => ({ type: T.PUZZLE_ENTER_KEY, puzzleId, opIndex, mask }),
+  // from: 'player' | 'intern'. The scripted fallback intern passes { scripted: true, topic }.
+  chatSend: (text, from = 'player', extra = {}) => ({ type: T.CHAT_SEND, text, from, ...extra }),
+  chatRead: () => ({ type: T.CHAT_READ }),
   dismissAlert: () => ({ type: T.DISMISS_ALERT }),
 });

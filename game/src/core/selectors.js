@@ -13,9 +13,10 @@ const byTypeThenName = (a, b) =>
   (a.type === 'folder' ? 0 : 1) - (b.type === 'folder' ? 0 : 1) || a.name.localeCompare(b.name);
 
 // Children in display order. Desktop order follows icon layout (column by column),
-// so Shift+click ranges on the desktop match what the player sees.
-export const childrenOf = (state, folderId) => {
-  const kids = Object.values(state.files).filter((f) => f.parent === folderId);
+// so Shift+click ranges on the desktop match what the player sees. Hidden (system) files are
+// invisible to the player; only the intern's projection includes them.
+export const childrenOf = (state, folderId, { includeHidden = false } = {}) => {
+  const kids = Object.values(state.files).filter((f) => f.parent === folderId && (includeHidden || !f.hidden));
   if (folderId === 'desktop') {
     const pos = state.desktop.positions;
     return kids.sort((a, b) => (pos[a.id]?.x ?? 0) - (pos[b.id]?.x ?? 0) || (pos[a.id]?.y ?? 0) - (pos[b.id]?.y ?? 0));
@@ -36,3 +37,9 @@ export const topWindow = (state) =>
 
 export const windowForFile = (state, fileId, kind) =>
   state.windows.find((w) => w.fileId === fileId && (!kind || w.kind === kind));
+
+export const chatMessages = (state) => state.intern?.messages ?? [];
+
+// Intern/system messages the player has not seen in INTERN.EXE yet.
+export const unreadForPlayer = (state) =>
+  chatMessages(state).filter((m) => m.from !== 'player' && m.id > (state.intern?.playerReadId ?? 0)).length;

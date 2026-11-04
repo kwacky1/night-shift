@@ -3,6 +3,8 @@
 import { shl, shr, xor, toWord, toHex } from './bits.js';
 
 export const OP_TYPES = ['shl', 'shr', 'xor'];
+// Things a puzzle can hide from the player's screen (the intern still sees them as numbers).
+export const PLAYER_HIDES = ['hex'];
 
 // Accepts numbers or strings like "0xBEEF", "0b1010" or "42". Returns NaN for junk.
 export const parseNumber = (v) => {
@@ -18,8 +20,8 @@ export const parseNumber = (v) => {
 export const parseWord = (v) => toWord(parseNumber(v) || 0);
 
 export const normaliseOp = (op) => {
-  if (op.type === 'xor') return { type: 'xor', mask: parseWord(op.mask) };
-  return { type: op.type, n: op.n ?? 1 };
+  const base = op.type === 'xor' ? { type: 'xor', mask: parseWord(op.mask) } : { type: op.type, n: op.n ?? 1 };
+  return op.keyed ? { ...base, keyed: true } : base;
 };
 
 export const normalisePuzzle = (p) => ({
@@ -61,6 +63,13 @@ export const validatePuzzle = (puzzle) => {
     if (op.type !== 'xor' && op.n !== undefined && !(Number.isInteger(op.n) && op.n >= 1 && op.n <= 15))
       errors.push(`shift amount out of range: ${op.n}`);
     if (op.type === 'xor' && op.mask === undefined) errors.push('xor op missing mask');
+    if (op.keyed !== undefined && typeof op.keyed !== 'boolean') errors.push('keyed must be true or false');
+  }
+  if (puzzle.playerHides !== undefined && !(Array.isArray(puzzle.playerHides) && puzzle.playerHides.every((h) => PLAYER_HIDES.includes(h))))
+    errors.push(`playerHides may only contain ${PLAYER_HIDES.join(', ')}`);
+  if (puzzle.onSolve !== undefined) {
+    const lvl = puzzle.onSolve?.internLevel;
+    if (lvl !== undefined && !(Number.isInteger(lvl) && lvl >= 0 && lvl <= 2)) errors.push('onSolve.internLevel must be 0-2');
   }
   for (const key of ['start', 'target']) {
     const v = parseNumber(puzzle[key]);
@@ -71,7 +80,8 @@ export const validatePuzzle = (puzzle) => {
 };
 
 // Breadth-first search for the shortest op sequence. Returns indices into puzzle.ops, or null.
-export const solve = (puzzle, maxDepth = puzzle.moveLimit) => {
+// Pass { withoutKeyed: true } to check a puzzle genuinely needs its keyed ops.
+export const solve = (puzzle, maxDepth = puzzle.moveLimit, { withoutKeyed = false } = {}) => {
   const start = parseWord(puzzle.start);
   const target = parseWord(puzzle.target);
   if (start === target) return [];
@@ -81,6 +91,7 @@ export const solve = (puzzle, maxDepth = puzzle.moveLimit) => {
     const next = [];
     for (const value of frontier) {
       for (let i = 0; i < puzzle.ops.length; i++) {
+        if (withoutKeyed && puzzle.ops[i].keyed) continue;
         const v = applyOp(value, puzzle.ops[i]);
         if (seen.has(v)) continue;
         seen.set(v, { prev: value, op: i });
