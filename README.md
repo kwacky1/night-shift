@@ -46,7 +46,7 @@ For itch.io, zip the contents of `game/` (so `index.html` is at the root of the 
 | Space | Gear Grind: clutch (hold) |
 | Right Shift / Left Shift | Gear Grind: shift up / shift down (only with the clutch in) |
 
-Gear Grind keys only work while GEARGR~1.EXE is the focused window. Click **Keys...** in its window to rebind them (press clutch, down, up in turn; Esc cancels; clashing keys fall back to the defaults). The bindings are saved per browser. The on-screen Clutch / Down / Up buttons work with a mouse or touch too. Engine sound is **off** by default: click **Sound** to toggle it.
+Gear Grind keys only work while GEARGR~1.EXE is the focused window. Clicking anywhere on it (title bar, road, buttons) gives it the keyboard, even if you were just typing to the intern, so Space never ends up in the chat box. Click **Keys...** in its window to rebind them (press clutch, down, up in turn; Esc cancels; clashing keys fall back to the defaults). The bindings are saved per browser. The on-screen Clutch / Down / Up buttons work with a mouse or touch too. Engine sound is **off** by default: click **Sound** to toggle it.
 
 Progress is saved to `localStorage`. **Start > Shut Down** wipes the save.
 
@@ -56,11 +56,16 @@ A shift runs from 22:00 to 06:00 at two real seconds per game minute (about 16 m
 
 ### Power and GEARGRIND.EXE
 
-Mainframe power (the `PWR` meter in the tray) drains every game minute. The only way to charge it is to drive Generator 2 in **GEARGR~1.EXE**:
+Mainframe power (the `PWR` meter in the tray, amber when LOW, orange at BROWNOUT, red when CRITICAL) drains every game minute. The only way to charge it is to drive Generator 2 in **GEARGR~1.EXE**:
 
 - The throttle is stuck open, so all you do is work the clutch and pick gears. There is no steering.
 - The road has hills. Each gear has its own torque curve: too high a gear for the slope and the engine bogs and stalls; too low and it screams into the limiter and stalls. Grinding (shifting without the clutch) does nothing useful.
-- Keep the rev needle in the green band to charge fastest. If it stalls, hold the clutch to crank it back to life.
+- Keep the rev needle in the green **CHARGE ZONE** on the tacho. Outside it, charging drops away fast. The line under the road says what's happening right now (`CHARGING +1.6%/min | drain -0.9%/min`, or `NOT CHARGING: wrong gear - revs too low, change down`).
+- The road is coloured by grade (amber climbs, blue descents) with signposts where it changes, and the HUD warns you ("CLIMB +15% in 120 m -> change down"). Expect to change gear every 10 to 20 seconds; no single gear works for long.
+- If it stalls, hold the clutch to crank it back to life.
+- The first time you open it, a card explains the controls. **?** brings it back.
+
+The top of the tank is hard to fill: charging tapers off above 50% and is slow above 80%. The drain also gets meaner after 02:00. With nobody driving, a full mainframe lasts about four real minutes.
 
 Low power bites:
 
@@ -267,7 +272,9 @@ Add a beat to `game/data/story.json`:
 
 ### Tuning Gear Grind
 
-`game/data/gearbox.json` holds the idle, lug, redline and blow-up revs, each gear's ratio (km/h per 1000 rpm) and torque table, the road profile and the charge rate. `game/tests/gearbox.test.js` checks that a sensible driver can keep the generator going and that bad shifting stalls it. The sim is pure (`step(sim, input, dt)`) and runs at a fixed 60 Hz step.
+`game/data/gearbox.json` holds the idle, lug, redline and blow-up revs, each gear's ratio (km/h per 1000 rpm) and torque table, the road profile, the CHARGE ZONE (`sweetBand`), the `chargeCurve` (rpm to 0..1) and the charge rate. `game/data/night.json` holds the drain, the `drainCurve` (minutes into the shift to a drain multiplier) and the `chargeTaper` (power level to a charge multiplier). The sim is pure (`step(sim, input, dt)`) and runs at a fixed 60 Hz step.
+
+`node scripts/balance.js` plays a whole night with scripted drivers (nobody, each gear held all night, and a driver that shifts on the revs) and prints how the power fares. `game/tests/balance.test.js` holds the line: no single gear can keep the mainframe above 70%, and the rev-shifter keeps the lights on all night.
 
 ### The MCP seam
 
