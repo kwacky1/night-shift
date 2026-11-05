@@ -123,6 +123,41 @@ const run = async () => {
   await page.waitForSelector('.tray .intern[data-status="online"]', { timeout: 10000 });
   expect(/OPERATOR/.test(await tool('whoami')), 'after reload the game reconnects with saved state');
   await page.screenshot({ path: `${SHOTS}/smoke-reload.png` });
+
+  // No agent: the scripted intern, replaying Simon's playtest in a fresh browser profile.
+  const solo = await (await browser.newContext({ viewport: { width: 1024, height: 768 } })).newPage();
+  solo.on('pageerror', (err) => console.error('    page error:', err.message));
+  await solo.goto(`http://localhost:${HTTP_PORT}/`);
+  await solo.waitForFunction(() => window.NIGHT_SHIFT);
+  await solo.evaluate(() => {
+    const { dispatch, actions, getState } = window.NIGHT_SHIFT;
+    dispatch(actions.bootComplete());
+    dispatch(actions.clockIn());
+    const s = getState();
+    dispatch(actions.hydrate({ ...s, intern: { ...s.intern, level: 2 } }));
+    dispatch(actions.openFile('intern'));
+  });
+  const scripted = async (text, pattern) => {
+    const before = await solo.$$eval('.intern-app .msg.intern', (els) => els.length);
+    await solo.fill('.intern-app .compose input', text);
+    await solo.press('.intern-app .compose input', 'Enter');
+    await solo.waitForFunction((n) => document.querySelectorAll('.intern-app .msg.intern').length > n, before, { timeout: 5000 });
+    const reply = await solo.$$eval('.intern-app .msg.intern', (els) => els.at(-1).textContent);
+    expect(pattern.test(reply), `scripted intern: "${text}"`, reply);
+  };
+  await scripted('what does the key log say?', /lanyard/);
+  await scripted('the key', /SYSTEM folder/);
+  await scripted('it says to ask you for a readoout', /read out per policy/);
+  await scripted('please', /zero, one, one, seven/);
+  await scripted('current is 0000 0001 0001 1000', /matches what I've got/);
+  await scripted('the target is 0000 1111 1111 0000', /XOR 0xFF00 first, then the key XOR/);
+  await solo.evaluate(() => window.NIGHT_SHIFT.dispatch(window.NIGHT_SHIFT.actions.openFile('badge')));
+  await solo.fill('.bitrot .keyrow input', '0117');
+  await solo.press('.bitrot .keyrow input', 'Enter');
+  await solo.waitForFunction(() => window.NIGHT_SHIFT.getState().puzzles.badge.unlocked.includes(3));
+  ok('player types the key as read out (0117) and BADGE.DB accepts it');
+  await scripted("what's the sequence?", /XOR before you shift/);
+  await solo.screenshot({ path: `${SHOTS}/smoke-scripted.png` });
   console.log(`\nSmoke test passed (${step} checks). Screenshots in ${SHOTS}`);
 };
 

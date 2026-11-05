@@ -133,7 +133,7 @@ There is deliberately no "dispatch anything" tool. The intern can't undo, reset,
 
 ### No agent? No worries
 
-With nothing connected, INTERN.EXE runs a scripted intern. It's keen, useless and easily distracted, but if you keep asking the right question it will eventually, grudgingly, cough up what you need. The game is completable without an agent.
+With nothing connected, INTERN.EXE runs a scripted intern. It's keen, useless and easily distracted, but if you keep asking the right question it will eventually, grudgingly, cough up what you need. Short follow-ups ("please", "go on", "?") keep the current thread going. Read it a Bit Rot row as 1s and 0s ("the target is 0000 1111 1111 0000") and it will work out a route from wherever the sector is now. Override keys are always hex, so the key box takes `0x0117`, `0117` or "zero, one, one, seven". The game is completable without an agent.
 
 ### Playing on itch.io (https) with a local intern
 
