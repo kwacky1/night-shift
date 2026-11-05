@@ -1,6 +1,7 @@
 // Save loading and migration. Pure, so it can be tested without a browser.
 // The rule: never hand back a save the player can't play. Anything odd starts a fresh shift.
 import { STATE_VERSION, createInitialState } from './initialState.js';
+import { createPower } from './power.js';
 import { endShift } from './shift.js';
 import { shiftMinutes } from './story.js';
 
@@ -49,6 +50,8 @@ export const migrateSave = (saved, data) => {
     else if (saved.version === 2) s = fromV2(saved, data);
     else return null;
     if (!s.files || !s.puzzles || !s.clock || !s.power || !s.intern) return null;
+    // Power tuning lives in data, so a saved shift picks up the current balance.
+    if (data?.night?.power) s = { ...s, power: { ...s.power, config: createPower(data.night.power).config } };
     const { _over, ...state } = s;
     s = state;
     if (s.phase === 'desktop' && (_over || s.clock.elapsed >= s.clock.length)) s = endShift(s, 'clock');

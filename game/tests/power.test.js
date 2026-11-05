@@ -5,7 +5,7 @@ import { reducer } from '../src/core/reducer.js';
 import { actions } from '../src/core/actions.js';
 import { createInitialState } from '../src/core/initialState.js';
 import { internActionError } from '../src/core/permissions.js';
-import { chargePower, createPower, drainForMinutes, isBitrotPowered, isBrownout, powerStatus } from '../src/core/power.js';
+import { chargePower, chargeTaper, createPower, drainForMinutes, drainRate, isBitrotPowered, isBrownout, powerStatus, validatePowerConfig } from '../src/core/power.js';
 import { solve } from '../src/logic/puzzle.js';
 
 const load = async (name) => JSON.parse(await readFile(new URL(`../data/${name}`, import.meta.url), 'utf8'));
@@ -28,17 +28,47 @@ test('power runs out a few real minutes into the shift if nobody drives', () => 
   const minutes = night.power.start / night.power.drainPerMinute;
   const realSeconds = (minutes * night.msPerMinute) / 1000;
   assert.ok(realSeconds > 150 && realSeconds < 300, `${realSeconds}s to blackout`);
+  const fromFull = ((100 / night.power.drainPerMinute) * night.msPerMinute) / 1000;
+  assert.ok(fromFull >= 180 && fromFull <= 240, `${fromFull}s from full to blackout (aim: 3-4 real minutes)`);
 });
 
-test('driving charges, clamped per report and at 100', () => {
+test('drain bites harder in the small hours (drainCurve in night.json)', () => {
+  const s = desktop();
+  const at = (minute) => drainRate({ ...s, clock: { ...s.clock, elapsed: minute } });
+  assert.equal(at(0), night.power.drainPerMinute);
+  assert.ok(at(420) > at(0) * 1.2, 'late drain is meaner');
+  for (let m = 10; m <= 480; m += 10) assert.ok(at(m) >= at(m - 10), 'never eases off');
+  const late = reducer({ ...s, clock: { ...s.clock, elapsed: 420 } }, actions.tick(1));
+  assert.ok(Math.abs(s.power.level - late.power.level - at(421)) < 0.011);
+});
+
+test('charging tapers off near full, so the top of the tank takes effort', () => {
+  const s = desktop();
+  const taper = (level) => chargeTaper(s, level);
+  assert.equal(taper(20), 1);
+  assert.equal(taper(50), 1);
+  assert.ok(taper(80) <= 0.6 && taper(95) < 0.25);
+  for (let l = 1; l <= 100; l++) assert.ok(taper(l) <= taper(l - 1));
+});
+
+test('night.json power block is valid, and validatePowerConfig catches nonsense', () => {
+  assert.deepEqual(validatePowerConfig(night.power), []);
+  assert.ok(validatePowerConfig({ ...night.power, chargeTaper: [[50, 1], [40, 0.5]] }).length);
+  assert.ok(validatePowerConfig({ ...night.power, drainCurve: [[0, -1]] }).length);
+  assert.ok(validatePowerConfig({ ...night.power, thresholds: { flicker: 10, brownout: 30, critical: 15 } }).length);
+});
+
+test('driving charges, tapered near full, clamped per report and at 100', () => {
   let s = desktop();
   s = reducer(s, actions.driveReport({ charge: 1.5, distance: 20, running: true, gear: 3, rpm: 4000 }));
-  assert.equal(s.power.level, night.power.start + 1.5);
+  assert.equal(s.power.level, night.power.start + 1.5 * chargeTaper(desktop()));
   assert.deepEqual(s.power.generator, { running: true, stalled: false, gear: 3, rpm: 4000 });
   assert.equal(s.stats.distance, 20);
-  const greedy = reducer(s, actions.driveReport({ charge: 500 }));
-  assert.equal(greedy.power.level, s.power.level + night.power.chargeCapPerReport, 'clamped per report');
-  assert.equal(chargePower(atPower(s, 99.5), 2).power.level, 100);
+  const low = atPower(s, 20);
+  assert.equal(reducer(low, actions.driveReport({ charge: 1.5 })).power.level, 21.5, 'no taper when low');
+  const greedy = reducer(low, actions.driveReport({ charge: 500 }));
+  assert.equal(greedy.power.level, 20 + night.power.chargeCapPerReport, 'clamped per report');
+  assert.equal(chargePower(atPower(s, 99.99), 2).power.level, 100);
   assert.equal(reducer(s, actions.driveReport({ charge: Number.NaN })).power.level, s.power.level);
   assert.equal(reducer(s, actions.driveReport({ charge: -5 })).power.level, s.power.level);
 });

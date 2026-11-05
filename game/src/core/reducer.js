@@ -6,7 +6,7 @@ import { applyOp, isSolved, opLabel } from '../logic/puzzle.js';
 import { toHex, toWord } from '../logic/bits.js';
 import { parseKey } from '../logic/words.js';
 import { clampLevel, internActionError, internLevel, isOpUnlocked, levelInfo } from './permissions.js';
-import { chargePower, drainForMinutes, isBitrotPowered, powerConfig } from './power.js';
+import { chargePower, drainForMinutes, drainRate, isBitrotPowered } from './power.js';
 import { endShift } from './shift.js';
 import { advanceStory, STORY_TRIGGERS } from './story.js';
 
@@ -259,7 +259,7 @@ const baseReducer = (state, action) => {
       if (state.phase !== 'desktop') return state;
       let minutes = Math.min(state.clock.length - state.clock.elapsed, Math.max(0, action.minutes ?? 1));
       // A long tick that runs the mainframe dry stops the clock at the blackout, not at the end.
-      const rate = powerConfig(state).drainPerMinute * (state.power.drainScale ?? 1);
+      const rate = drainRate(state);
       if (rate > 0) minutes = Math.min(minutes, Math.max(1, Math.ceil(state.power.level / rate)));
       const elapsed = state.clock.elapsed + minutes;
       let s = drainForMinutes({ ...state, clock: { ...state.clock, elapsed } }, minutes);

@@ -69,13 +69,55 @@ const setLevel = (state, level) => {
 
 export const drainPower = (state, amount) => setLevel(state, state.power.level - Math.max(0, amount));
 
-export const drainForMinutes = (state, minutes) =>
-  drainPower(state, Math.max(0, minutes) * powerConfig(state).drainPerMinute * (state.power.drainScale ?? 1));
+// Linear interpolation over [[x, y], ...] sorted by x, clamped at the ends. Empty or missing tables give 1.
+const curve = (table, x) => {
+  if (!Array.isArray(table) || !table.length) return 1;
+  if (x <= table[0][0]) return table[0][1];
+  for (let i = 1; i < table.length; i++) {
+    const [x1, y1] = table[i];
+    if (x <= x1) {
+      const [x0, y0] = table[i - 1];
+      return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
+    }
+  }
+  return table.at(-1)[1];
+};
 
-// Applies a DRIVE_REPORT. The charge is clamped per report so nothing can top up the mainframe in one go.
+// Drain per game minute right now: the base rate, scaled by the night's drain curve (keyed by minutes
+// into the shift, so the small hours bite harder) and by any story drainScale.
+export const drainRate = (state) => {
+  const cfg = powerConfig(state);
+  return cfg.drainPerMinute * curve(cfg.drainCurve, state.clock?.elapsed ?? 0) * (state.power?.drainScale ?? 1);
+};
+
+export const drainForMinutes = (state, minutes) => drainPower(state, Math.max(0, minutes) * drainRate(state));
+
+// How well charge lands at a given level (0..1). The top of the tank is hard to fill.
+export const chargeTaper = (state, level = powerLevel(state)) => Math.max(0, curve(powerConfig(state).chargeTaper, level));
+
+// Applies a DRIVE_REPORT. The charge is tapered near full and clamped per report so nothing can top up
+// the mainframe in one go.
 export const chargePower = (state, charge) => {
-  const amount = Number.isFinite(charge) ? Math.max(0, Math.min(powerConfig(state).chargeCapPerReport, charge)) : 0;
-  return setLevel(state, state.power.level + amount);
+  const raw = Number.isFinite(charge) ? Math.max(0, Math.min(powerConfig(state).chargeCapPerReport, charge)) : 0;
+  return setLevel(state, state.power.level + raw * chargeTaper(state));
+};
+
+// Checks the power block of data/night.json. Returns a list of problems (empty when fine).
+export const validatePowerConfig = (cfg = {}) => {
+  const errors = [];
+  if (!(cfg.start > 0 && cfg.start <= POWER_MAX)) errors.push('power.start must be in (0, 100]');
+  if (!(cfg.drainPerMinute >= 0)) errors.push('power.drainPerMinute must be >= 0');
+  if (!(cfg.chargeCapPerReport > 0)) errors.push('power.chargeCapPerReport must be positive');
+  const t = cfg.thresholds ?? {};
+  if (!(t.critical < t.brownout && t.brownout < t.flicker && t.flicker < POWER_MAX)) errors.push('power.thresholds need critical < brownout < flicker < 100');
+  for (const key of ['drainCurve', 'chargeTaper']) {
+    const table = cfg[key];
+    if (table === undefined) continue;
+    if (!Array.isArray(table) || !table.length || table.some((p, i) => !Array.isArray(p) || p.length !== 2 || !p.every(Number.isFinite) || p[1] < 0 || (i && p[0] <= table[i - 1][0]))) {
+      errors.push(`power.${key} must be [[x, factor >= 0], ...] with rising x`);
+    }
+  }
+  return errors;
 };
 
 export const generatorSummary = (state) => {

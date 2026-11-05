@@ -125,7 +125,8 @@ test('a long tick that runs the mainframe dry stops the clock at the blackout', 
   const s = reducer(desktop(), actions.tick(480));
   assert.equal(s.phase, 'over');
   assert.equal(s.shiftEnd.reason, 'blackout');
-  assert.equal(s.clock.elapsed, Math.ceil(80 / data.night.power.drainPerMinute));
-  assert.equal(s.shiftEnd.at, '23:55');
+  const minutes = Math.ceil(80 / data.night.power.drainPerMinute);
+  assert.equal(s.clock.elapsed, minutes);
+  assert.equal(s.shiftEnd.at, `${22 + Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`);
   assert.equal(s.power.level, 0);
 });

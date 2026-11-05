@@ -2,9 +2,57 @@
   "msPerMinute": 2000,
   "power": {
     "start": 80,
-    "drainPerMinute": 0.7,
+    "drainPerMinute": 0.85,
+    "drainCurve": [
+      [
+        0,
+        1
+      ],
+      [
+        240,
+        1
+      ],
+      [
+        300,
+        1.2
+      ],
+      [
+        480,
+        1.3
+      ]
+    ],
     "chargeCapPerReport": 2,
-    "thresholds": { "flicker": 50, "brownout": 30, "critical": 15 },
+    "chargeTaper": [
+      [
+        0,
+        1
+      ],
+      [
+        50,
+        1
+      ],
+      [
+        70,
+        0.75
+      ],
+      [
+        80,
+        0.5
+      ],
+      [
+        90,
+        0.25
+      ],
+      [
+        100,
+        0.08
+      ]
+    ],
+    "thresholds": {
+      "flicker": 50,
+      "brownout": 30,
+      "critical": 15
+    },
     "nagBelow": 40
   }
 }

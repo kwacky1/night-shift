@@ -41,6 +41,24 @@ test('gearbox.json is valid, and validateGearbox catches nonsense', () => {
   assert.ok(validateGearbox({ ...cfg, redline: 100 }).length);
   assert.ok(validateGearbox({ ...cfg, gears: [cfg.gears[1], cfg.gears[0], cfg.gears[2]] }).some((e) => /taller/.test(e)));
   assert.ok(validateGearbox({ ...cfg, road: { segments: [{ length: 10, grade: 0.9 }] } }).length);
+  assert.ok(validateGearbox({ ...cfg, chargeCurve: [[1000, 0], [4000, 0.8], [6000, 0]] }).some((e) => /CHARGE ZONE/.test(e)));
+  assert.ok(validateGearbox({ ...cfg, chargeCurve: [[1000, 2], [900, 0]] }).length);
+});
+
+test('charge falls away quickly outside the CHARGE ZONE', () => {
+  const [lo, hi] = cfg.sweetBand;
+  assert.equal(chargeBand(cfg, lo), 1);
+  assert.equal(chargeBand(cfg, hi), 1);
+  assert.ok(chargeBand(cfg, lo - 600) < 0.3, 'well below the zone barely charges');
+  assert.ok(chargeBand(cfg, hi + 600) < 0.5, 'well above the zone barely charges');
+});
+
+test('the road needs every gear: steep climbs and long descents, no long flats', () => {
+  const grades = cfg.road.segments.map((s) => s.grade);
+  assert.ok(grades.some((g) => g >= 0.15), 'a climb that needs 2nd');
+  assert.ok(grades.some((g) => g <= -0.1), 'a descent that needs 5th');
+  const flat = cfg.road.segments.filter((s) => Math.abs(s.grade) < 0.04).reduce((a, s) => a + s.length, 0);
+  assert.ok(flat / roadLength(cfg.road) < 0.2, 'mostly not flat');
 });
 
 test('torque lookup interpolates linearly and clamps at the ends', () => {
@@ -93,7 +111,7 @@ test('the right gear holds the same climb', () => {
   const c = flat(0.1);
   const { sim } = run(rolling(2, 40, c), 10, {}, c);
   assert.ok(sim.running && !sim.stalled);
-  assert.ok(sim.charge > 10);
+  assert.ok(sim.charge > 0.6 * cfg.chargePerSecond * 10, `charge ${sim.charge}`);
 });
 
 test('holding 1st on the limiter over-revs and stalls', () => {

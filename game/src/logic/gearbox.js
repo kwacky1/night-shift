@@ -65,10 +65,12 @@ export const heightProfile = (road, from, to, samples) => {
 
 export const wheelRpm = (cfg, gear, v) => (gear > 0 ? ((v * KMH) / cfg.gears[gear - 1].kmhPer1000) * 1000 : 0);
 
-// 0..1: how well this rpm charges the mainframe.
+// 0..1: how well this rpm charges the mainframe. data/gearbox.json's chargeCurve ([[rpm, 0..1], ...])
+// shapes it; without one it ramps up from idle to the sweet band and tails off to the redline.
 export const chargeBand = (cfg, rpm) => {
   const [lo, hi] = cfg.sweetBand;
   if (rpm < cfg.idleRpm || rpm >= cfg.redline) return 0;
+  if (cfg.chargeCurve) return Math.max(0, Math.min(1, lookup(cfg.chargeCurve, rpm)));
   if (rpm < lo) return (rpm - cfg.idleRpm) / (lo - cfg.idleRpm);
   if (rpm <= hi) return 1;
   return 1 - (0.7 * (rpm - hi)) / (cfg.redline - hi);
@@ -200,6 +202,12 @@ export const validateGearbox = (cfg) => {
   if (!(cfg.idleRpm < cfg.lugRpm && cfg.lugRpm < cfg.redline && cfg.redline < cfg.blowRpm)) errors.push('need idleRpm < lugRpm < redline < blowRpm');
   if (cfg.freeRevRpm >= cfg.redline) errors.push('freeRevRpm must be below the redline');
   if (!Array.isArray(cfg.sweetBand) || !(cfg.idleRpm < cfg.sweetBand[0] && cfg.sweetBand[0] < cfg.sweetBand[1] && cfg.sweetBand[1] < cfg.redline)) errors.push('sweetBand must sit between idle and redline');
+  const cc = cfg.chargeCurve;
+  if (cc !== undefined) {
+    if (!Array.isArray(cc) || cc.length < 2 || cc.some((p, j) => !Array.isArray(p) || p.length !== 2 || !p.every(Number.isFinite) || p[1] < 0 || p[1] > 1 || (j && p[0] <= cc[j - 1][0]))) {
+      errors.push('chargeCurve must be [[rpm, 0..1], ...] with rising rpm');
+    } else if (Array.isArray(cfg.sweetBand) && cfg.sweetBand.some((rpm) => lookup(cc, rpm) < 1)) errors.push('chargeCurve must be 1 across the sweetBand (the CHARGE ZONE)');
+  }
   if (!Array.isArray(cfg.gears) || cfg.gears.length < 3) errors.push('need at least 3 gears');
   (cfg.gears ?? []).forEach((g, i) => {
     if (!(g.kmhPer1000 > 0)) errors.push(`gear ${i + 1}: kmhPer1000 must be positive`);
