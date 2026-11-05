@@ -229,3 +229,24 @@ test('a raw client with no game state cannot use the tools', async () => {
   assert.equal(link.connected, false);
   ws.close();
 });
+
+test('brownout: the intern can still chat but ops are refused', async () => {
+  const store = newStore();
+  await connectGame(store);
+  store.dispatch(actions.hydrate({ ...store.getState(), power: { ...store.getState().power, level: 20 } }));
+  await waitFor(() => link.state.power.level === 20);
+  assert.match((await call('whoami')).text, /BROWNOUT/);
+  assert.match((await call('shift_left', { puzzle: 'payroll' })).text, /BROWNOUT/);
+  assert.equal(store.getState().puzzles.payroll.history.length, 0);
+  assert.equal((await call('message_player', { text: 'please drive' })).isError, false);
+  assert.equal(store.getState().intern.messages.at(-1).text, 'please drive');
+});
+
+test('after 06:00 the tools say the shift is over', async () => {
+  const store = newStore();
+  await connectGame(store);
+  store.dispatch(actions.tick(480));
+  await waitFor(() => link.state.phase === 'over');
+  assert.match((await call('list_files')).text, /shift is over/);
+  assert.match((await call('whoami')).text, /shiftOver/);
+});

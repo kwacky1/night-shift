@@ -9,7 +9,7 @@ import { createInitialState } from '../../game/src/core/initialState.js';
 import { handleBridgeMessage, PROTOCOL_VERSION } from '../../game/src/bridge/api.js';
 
 const load = async (name) => JSON.parse(await readFile(new URL(`../../game/data/${name}`, import.meta.url), 'utf8'));
-export const gameData = { files: await load('files.json'), puzzles: await load('puzzles.json') };
+export const gameData = { files: await load('files.json'), puzzles: await load('puzzles.json'), night: await load('night.json'), story: await load('story.json') };
 
 export const newStore = ({ clockIn = true } = {}) => {
   const store = createStore(reducer, createInitialState(gameData));

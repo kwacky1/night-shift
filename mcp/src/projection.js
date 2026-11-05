@@ -8,7 +8,8 @@
 // - The player sees the target and current bit patterns but, on some sectors, no numbers at all.
 import { toBinary, toHex } from '../../game/src/logic/bits.js';
 import { opLabel, parseNumber } from '../../game/src/logic/puzzle.js';
-import { pathOf } from '../../game/src/core/selectors.js';
+import { livePuzzles, pathOf } from '../../game/src/core/selectors.js';
+import { generatorSummary, isBitrotPowered, isBrownout, powerConfig, powerLevel, powerStatus } from '../../game/src/core/power.js';
 import { canInternReadFile, canInternUseOp, internLevel, isOpUnlocked, levelInfo } from '../../game/src/core/permissions.js';
 
 export const BADGE = '#0118';
@@ -34,10 +35,36 @@ export const whoami = (state) => {
     clock: clock(state),
     shiftLeft: HOURS(Math.max(0, state.clock.length - state.clock.elapsed)),
     sysadminPhase: state.phase,
+    ...(state.shiftNumber ? { shiftNumber: state.shiftNumber } : {}),
+    ...(state.phase === 'over' ? { shiftOver: state.shiftEnd?.reason === 'blackout' ? 'BLACKOUT: the mainframe went down.' : 'The shift has ended (06:00).' } : {}),
+    ...(state.power ? powerView(state) : {}),
   };
 };
 
-const visibleFiles = (state) => Object.values(state.files).filter((f) => f.id !== 'desktop');
+// Power is the sysadmin's job. The intern can only watch the needle and nag.
+const powerView = (state) => {
+  const status = powerStatus(state);
+  const level = Math.round(powerLevel(state));
+  const notes = {
+    ok: 'Mainframe power is fine.',
+    flicker: 'Power is getting low and the lights are flickering.',
+    brownout: 'BROWNOUT: your line is browned out. Chat still works, but apply_op and enter_key are refused until power is back up.',
+    critical: 'CRITICAL: Bit Rot ops are offline for everyone until power is back up.',
+    blackout: 'BLACKOUT: the mainframe is down.',
+  };
+  const low = level < (powerConfig(state).nagBelow ?? 40);
+  return {
+    mainframePower: `${level}%`,
+    powerStatus: status.toUpperCase(),
+    generator: generatorSummary(state),
+    powerNote: notes[status],
+    canRunOps: !isBrownout(state) && isBitrotPowered(state),
+    whoDrives: `Only the sysadmin can drive the generator (GEARGR~1.EXE on their desktop). You cannot.${low ? ' Power is low: nag them to drive.' : ''}`,
+  };
+};
+
+// Dormant files are not on the drive yet, for anyone.
+const visibleFiles = (state) => Object.values(state.files).filter((f) => f.id !== 'desktop' && !f.dormant);
 
 export const filePath = (state, file) => pathOf(state, file.id);
 
@@ -75,9 +102,10 @@ const norm = (s) =>
 // Find a file by id, full path (C:\C_DRIVE\MEMOS\MEMO_01.TXT, slashes either way) or unique name.
 export const resolveFile = (state, query) => {
   const q = norm(query);
-  if (!q) return { file: state.files.desktop };
-  if (state.files[String(query).trim()]) return { file: state.files[String(query).trim()] };
+  if (!q || String(query).trim() === 'desktop') return { file: state.files.desktop };
   const all = visibleFiles(state);
+  const byId = all.find((f) => f.id === String(query).trim());
+  if (byId) return { file: byId };
   const byPath = all.find((f) => norm(pathOf(state, f.id)) === q);
   if (byPath) return { file: byPath };
   const byName = all.filter((f) => f.name === q);
@@ -106,9 +134,12 @@ export const puzzleFiles = (state, puzzleId) => visibleFiles(state).filter((f) =
 
 export const resolvePuzzle = (state, query) => {
   const q = String(query ?? '').trim();
-  if (state.puzzles[q]) return { puzzle: state.puzzles[q] };
+  const live = livePuzzles(state);
+  const byId = live.find((p) => p.id === q);
+  if (byId) return { puzzle: byId };
   const { file, error } = resolveFile(state, q);
-  if (file?.puzzleId && state.puzzles[file.puzzleId]) return { puzzle: state.puzzles[file.puzzleId] };
+  const viaFile = file?.puzzleId && live.find((p) => p.id === file.puzzleId);
+  if (viaFile) return { puzzle: viaFile };
   if (file) return { error: `${filePath(state, file)} has no Bit Rot.` };
   return { error: error ?? `No puzzle called ${q}.` };
 };
@@ -141,11 +172,13 @@ export const puzzleView = (state, p) => ({
   status: p.solved ? 'RECOVERED' : p.failed ? 'OUT OF MOVES (sysadmin must undo or reset)' : 'CORRUPTED',
 });
 
-export const listPuzzles = (state) => Object.values(state.puzzles).map((p) => puzzleView(state, p));
+export const listPuzzles = (state) => livePuzzles(state).map((p) => puzzleView(state, p));
 
 export const readLogs = (state, limit = 20) => state.log.slice(-limit).map((l) => `[${l.at}] ${l.text}`);
 
-export const chat = (state) => state.intern.messages.map((m) => ({ id: m.id, at: m.at, from: m.from, text: m.text }));
+// Ghost posts arrive on the line as #0117. Nobody has explained that to the intern either.
+const SPEAKERS = { player: 'player', intern: 'intern', system: 'system', ghost: '#0117' };
+export const chat = (state) => state.intern.messages.map((m) => ({ id: m.id, at: m.at, from: SPEAKERS[m.from] ?? m.from, text: m.text }));
 
 export const parseMask = (value) => {
   const n = parseNumber(String(value ?? '').trim());

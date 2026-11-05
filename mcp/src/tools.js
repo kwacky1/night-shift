@@ -29,6 +29,7 @@ export const createTools = (link, { port = link.port } = {}) => {
   const withGame = (fn, { needsDesktop = true } = {}) => async (args = {}) => {
     const state = link.state;
     if (!link.connected || !state) return text(notConnectedText(port));
+    if (needsDesktop && state.phase === 'over') return text(state.shiftEnd?.reason === 'blackout' ? 'BLACKOUT. The mainframe is down and the shift is over. Nothing on the network until the sysadmin clocks in for another shift.' : 'It is 06:00. The shift is over. Nothing on the network until the sysadmin clocks in for another shift.');
     if (needsDesktop && state.phase !== 'desktop') return text('The sysadmin has not clocked in yet. Nothing on the network until they do.');
     try {
       return await fn(state, args);
@@ -45,7 +46,7 @@ export const createTools = (link, { port = link.port } = {}) => {
     return msgs.filter((m) => m.from === 'player' && m.id > seenId);
   };
 
-  const formatMessages = (msgs) => msgs.map((m) => `[${m.at}] ${m.from === 'player' ? 'SYSADMIN' : m.from === 'intern' ? 'YOU (#0118)' : 'SYSTEM'}: ${m.text}`).join('\n');
+  const formatMessages = (msgs) => msgs.map((m) => `[${m.at}] ${m.from === 'player' ? 'SYSADMIN' : m.from === 'intern' ? 'YOU (#0118)' : m.from === '#0117' ? '#0117' : 'SYSTEM'}: ${m.text}`).join('\n');
 
   const takeUnread = (state) => {
     const unread = unreadPlayerMessages(state);
