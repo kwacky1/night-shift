@@ -419,7 +419,6 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
 .tray .power[data-status='flicker'] { color: #8a5a00; }
 .tray .power[data-status='brownout'], .tray .power[data-status='critical'] { color: #a00; font-weight: bold; }
 .tray .power[data-status='critical'] { animation: blink 1s steps(2) infinite; }
-@keyframes blink { 50% { visibility: hidden; } }
 .tray .clock { font-family: var(--mono); font-size: 13px; }
 
 #start-menu {
