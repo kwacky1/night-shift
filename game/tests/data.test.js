@@ -61,8 +61,43 @@ test('keyed puzzles genuinely need both sides', () => {
   }
 });
 
-test('at least one puzzle escalates intern permissions', () => {
-  assert.ok(puzzles.some((p) => p.onSolve?.internLevel > 1));
+test('the night escalates the intern all the way to SUPERVISOR', () => {
+  const levels = puzzles.map((p) => p.onSolve?.internLevel).filter(Boolean);
+  for (let level = 2; level <= MAX_LEVEL; level++) assert.ok(levels.includes(level), `no puzzle grants level ${level}`);
+  for (const f of files.filter((x) => x.minLevel)) assert.ok(levels.includes(f.minLevel) || f.minLevel <= 1, `nothing unlocks ${f.id}`);
+  assert.ok(files.some((f) => f.minLevel === MAX_LEVEL), 'something is SUPERVISOR-only');
+});
+
+test('every onSolve is well formed', () => {
+  for (const p of puzzles.filter((x) => x.onSolve)) {
+    for (const k of Object.keys(p.onSolve)) assert.ok(['internLevel', 'drainScale', 'message'].includes(k), `${p.id}.onSolve.${k}`);
+    if (p.onSolve.drainScale !== undefined) assert.ok(p.onSolve.drainScale > 0 && p.onSolve.drainScale < 1, `${p.id} drainScale`);
+  }
+});
+
+test('the story only references real files and puzzles, and reveals every dormant file', async () => {
+  const story = await load('story.json');
+  const { validateStory } = await import('../src/core/story.js');
+  const errors = validateStory(story, { fileIds: files.map((f) => f.id), puzzleIds: puzzles.map((p) => p.id), dormantIds: files.filter((f) => f.dormant).map((f) => f.id) });
+  assert.deepEqual(errors, []);
+  for (const f of files.filter((x) => x.dormant)) assert.ok(!f.hidden || f.parent !== 'desktop', `${f.id} would be a hidden desktop file`);
+});
+
+test('the scripted intern covers the shipped data', async () => {
+  const { validateScript } = await import('../src/intern/fallback.js');
+  const script = await load('intern.json');
+  assert.deepEqual(validateScript(script, { puzzleIds: puzzles.map((p) => p.id), fileIds: files.map((f) => f.id) }), []);
+  const mentioned = new Set(script.topics.flatMap((t) => [t.puzzle, t.leaks?.puzzle]).filter(Boolean));
+  for (const p of puzzles.filter((x) => x.ops.some((op) => op.keyed))) assert.ok(mentioned.has(p.id), `no scripted topic leaks the ${p.id} key`);
+  assert.ok(script.nag?.lines?.length, 'the scripted intern must nag about power');
+});
+
+test('shipped data builds a valid initial state, with the night and the story', async () => {
+  const s = createInitialState({ files, puzzles, night: await load('night.json'), story: await load('story.json') });
+  assert.ok(s.power.level > 0);
+  assert.ok(s.clock.msPerMinute > 0);
+  assert.ok(s.story.beats.length > 0);
+  assert.deepEqual(JSON.parse(JSON.stringify(s)), s);
 });
 
 test('shipped data builds a valid initial state', () => {

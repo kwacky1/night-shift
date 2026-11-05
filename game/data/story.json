@@ -1,3 +1,101 @@
 {
-  "beats": []
+  "beats": [
+    {
+      "id": "facilities-generator",
+      "at": "22:05",
+      "note": "Teach the power loop early.",
+      "effects": [
+        { "do": "post", "from": "system", "text": "Facilities (R. Patterson): mains are off for the night. Generator 2 runs the mainframe. GEARGR~1.EXE on your desktop. Throttle's stuck open, so it's all clutch and gears. Don't let it stall." },
+        { "do": "log", "text": "Running on Generator 2. Mainframe power is draining." }
+      ]
+    },
+    {
+      "id": "ghost-desk",
+      "at": "22:40",
+      "effects": [{ "do": "post", "from": "ghost", "text": "you're sitting at my desk." }]
+    },
+    {
+      "id": "genset-appears",
+      "at": "23:15",
+      "effects": [
+        { "do": "reveal", "file": "genset" },
+        { "do": "post", "from": "system", "text": "Facilities: found GENSET.CFG in C_DRIVE. It has Bit Rot and the governor's pinned open, which is why the mainframe drinks so much. Fix it and the drain eases off." },
+        { "do": "log", "text": "GENSET.CFG found in C_DRIVE. Bit Rot detected." }
+      ]
+    },
+    {
+      "id": "shiftlog-nudge",
+      "at": "00:30",
+      "when": { "locked": "shiftlog" },
+      "effects": [{ "do": "post", "from": "ghost", "text": "the shift log. it isn't a backup. give it its name back." }]
+    },
+    {
+      "id": "surge-0113",
+      "at": "01:13",
+      "effects": [
+        { "do": "drain", "amount": 8 },
+        { "do": "log", "text": "Power surge on the payroll circuit." },
+        { "do": "post", "from": "ghost", "text": "01:13. that was not me." }
+      ]
+    },
+    {
+      "id": "shiftlog-restored",
+      "when": { "unlocked": "shiftlog" },
+      "effects": [
+        { "do": "flag", "name": "shiftlog-read" },
+        { "do": "reveal", "file": "timeclk" },
+        { "do": "reveal", "file": "timeaud" },
+        { "do": "log", "text": "SHIFTLOG.TXT indexed. TIMECLK.DAT restored to C_DRIVE (corrupted)." },
+        { "do": "post", "from": "system", "text": "SHIFTLOG.TXT restored. Its index pointed at TIMECLK.DAT, now back in C_DRIVE with Bit Rot. The override audit went to SYSTEM\\TIMECLK.AUD (OPERATOR access)." }
+      ]
+    },
+    {
+      "id": "timeclk-from-tape",
+      "at": "02:00",
+      "when": { "notFired": "shiftlog-restored" },
+      "effects": [
+        { "do": "reveal", "file": "timeclk" },
+        { "do": "reveal", "file": "timeaud" },
+        { "do": "log", "text": "Scheduled job: TIMECLK.DAT rebuilt from tape. Corrupted on arrival." },
+        { "do": "post", "from": "system", "text": "Scheduled job: TIMECLK.DAT rebuilt from tape into C_DRIVE, Bit Rot and all. Audit trail in SYSTEM\\TIMECLK.AUD (OPERATOR access)." }
+      ]
+    },
+    {
+      "id": "brownout-warning",
+      "when": { "powerBelow": 30 },
+      "effects": [
+        { "do": "post", "from": "system", "text": "BROWNOUT: mainframe under 30%. The intern line can chat but can't run remote ops or keys until you drive the power back up." }
+      ]
+    },
+    {
+      "id": "timeclk-read",
+      "when": { "solved": ["timeclk"] },
+      "effects": [{ "do": "post", "from": "ghost", "text": "two badges. one terminal. one keyboard. you worked it out faster than I did." }]
+    },
+    {
+      "id": "stall-0340",
+      "at": "03:40",
+      "effects": [
+        { "do": "stall" },
+        { "do": "drain", "amount": 5 },
+        { "do": "log", "text": "Generator 2 stalled at 03:40. Again." },
+        { "do": "post", "from": "ghost", "text": "03:40. it always stalls at 03:40. hold the clutch." }
+      ]
+    },
+    {
+      "id": "audit-0500",
+      "at": "05:00",
+      "effects": [
+        { "do": "reveal", "file": "blame" },
+        { "do": "log", "text": "Head Office: BLAME.EXE installing. Audit at 06:00." },
+        { "do": "alert", "title": "HEAD OFFICE", "text": "AUDIT NOTICE\n\nHead Office will review tonight's logs from terminal NS-02 at 06:00 sharp.\n\nSomeone will be held responsible for the 12th of October. BLAME.EXE is being installed on your desktop." },
+        { "do": "post", "from": "ghost", "text": "they need a name by six. last time it was mine." }
+      ]
+    },
+    {
+      "id": "last-call",
+      "at": "05:45",
+      "effects": [{ "do": "post", "from": "system", "text": "15 minutes to clock-off. BLAME.EXE at 97%." }]
+    }
+  ]
 }
