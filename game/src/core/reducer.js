@@ -18,6 +18,7 @@ const WINDOW_SIZES = {
   viewer: { w: 600, h: 380 },
   bitrot: { w: 500, h: 420 },
   intern: { w: 380, h: 420, x: 680, y: 40 },
+  geargrind: { w: 540, h: 420, x: 60, y: 60 },
 };
 
 // 8.3 filenames, DOS style. Stored upper case.
