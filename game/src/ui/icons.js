@@ -174,7 +174,7 @@ export const typeLabel = (file) => {
   if (file.locked && file.puzzleId) return 'Corrupted';
   const ext = file.name.split('.')[1] ?? '';
   return (
-    { TXT: 'Text Document', DAT: 'Data File', BAT: 'MS-DOS Batch File', SYS: 'System File', BAK: 'Backup File', DOC: 'Document' }[ext] ??
+    { TXT: 'Text Document', DAT: 'Data File', BAT: 'MS-DOS Batch File', SYS: 'System File', BAK: 'Backup File', DOC: 'Document', EXE: 'Application', DB: 'Database', LOG: 'Log File' }[ext] ??
     `${ext || 'Unknown'} File`
   );
 };

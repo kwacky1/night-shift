@@ -1,6 +1,6 @@
 // Taskbar (start button, window buttons, tray clock), start menu and the modal alert box.
 import { actions } from '../core/actions.js';
-import { clockLabel } from '../core/selectors.js';
+import { clockLabel, unreadForPlayer } from '../core/selectors.js';
 import { esc, ui } from './dom.js';
 import { iconSvg } from './icons.js';
 import { titleFor, iconForWindow } from './windows.js';
@@ -9,6 +9,7 @@ const MENU = [
   { id: 'readme', label: 'Read Me', icon: 'text' },
   { id: 'drive', label: 'C: Drive', icon: 'drive' },
   { id: 'payroll', label: 'PAYROLL.DAT', icon: 'corrupt' },
+  { id: 'intern', label: 'INTERN.EXE', icon: 'system' },
   { sep: true },
   { act: 'reset', label: 'Shut Down (wipe save)...', icon: 'system' },
 ];
@@ -17,7 +18,7 @@ export const initTaskbar = (bar, menu, ctx) => {
   bar.innerHTML = `
     <button type="button" class="start"><span class="moon">&#9790;</span>Start</button>
     <div class="tasks"></div>
-    <div class="tray"><span class="intern" title="Week 2: connect a real AI intern over MCP">INTERN: OFFLINE</span><span class="clock"></span></div>`;
+    <div class="tray"><button type="button" class="intern" title="Open INTERN.EXE">INTERN: SCRIPTED</button><span class="clock"></span></div>`;
   menu.className = 'raised';
   menu.innerHTML = `<div class="stripe">NightOS 3.11</div><ul>${MENU.map((m) =>
     m.sep ? '<li class="sep"></li>' : `<li data-open="${m.id ?? ''}" data-act="${m.act ?? ''}">${iconSvg(m.icon)}${esc(m.label)}</li>`,
@@ -43,6 +44,10 @@ export const initTaskbar = (bar, menu, ctx) => {
     if (ui.startMenuOpen && !e.target.closest('#start-menu, #taskbar .start')) setMenu(false);
   });
 
+  bar.querySelector('.tray .intern').addEventListener('click', () => {
+    if (ctx.getState().files.intern) ctx.dispatch(actions.openFile('intern'));
+  });
+
   bar.querySelector('.tasks').addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-win]');
     if (!btn) return;
@@ -59,8 +64,13 @@ export const renderTaskbar = (bar, state, prev) => {
   const label = clockLabel(state);
   if (clock.textContent !== label) clock.textContent = label;
   const intern = bar.querySelector('.intern');
-  intern.textContent = ui.internOnline ? 'INTERN: ONLINE' : 'INTERN: OFFLINE';
-  intern.classList.toggle('online', ui.internOnline);
+  const unread = unreadForPlayer(state);
+  const mode = { online: 'ONLINE', connecting: 'DIALLING' }[ui.internStatus] ?? 'SCRIPTED';
+  const text = `INTERN: ${mode}${unread ? ` (${unread})` : ''}`;
+  if (intern.textContent !== text) intern.textContent = text;
+  intern.dataset.status = ui.internStatus;
+  intern.classList.toggle('online', ui.internStatus === 'online');
+  intern.classList.toggle('unread', unread > 0);
   if (prev && prev.windows === state.windows && prev.focusedWindowId === state.focusedWindowId && prev.files === state.files) return;
   bar.querySelector('.tasks').innerHTML = [...state.windows]
     .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))

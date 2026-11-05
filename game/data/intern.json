@@ -1,0 +1,138 @@
+{
+  "followUps": ["please", "pls", "plz", "again", "go on", "come on", "and", "so", "well", "seriously", "really", "huh", "mate", "now"],
+  "topics": [
+    {
+      "id": "pattern",
+      "detect": "bits",
+      "keywords": [],
+      "roles": {
+        "current": { "strong": ["current", "currently", "start", "starting", "started", "top row", "top"], "weak": ["now", "is at", "at the moment", "right now", "showing", "shows"] },
+        "target": { "strong": ["target", "goal", "bottom row", "bottom", "destination"], "weak": ["need", "needs", "want", "wants", "should", "supposed", "has to"] }
+      },
+      "lines": [
+        "{{target}}? Neat. From where it is now: {{plan}}. Don't quote me.",
+        "Right, {{targetBits}}. Did it on a napkin: {{plan}}.",
+        "Still {{target}}? Then still: {{plan}}. I'm writing it on my hand."
+      ],
+      "currentLines": [
+        "{{valueBits}}. Yeah, matches what I've got here. Now read me the TARGET row, the one underneath.",
+        "Current's {{value}}, agreed. The bottom row is the one I can't see. Lit is 1."
+      ],
+      "currentWrongLines": [
+        "Hmm. I've got {{actualBits}} on my end, not {{valueBits}}. Are you reading the top row?",
+        "That's not what my terminal says. I see {{actualBits}}. One of us needs glasses."
+      ],
+      "wrongLines": [
+        "{{valueBits}}? Nothing I can see is aiming for that. Read me the TARGET row again, left to right?",
+        "{{value}} doesn't ring a bell. Bottom row of the sector, lit is 1, dark is 0."
+      ],
+      "unknownLines": [
+        "{{valueBits}}. Cool. Is that the CURRENT row or the TARGET row?",
+        "Top row or bottom row? I can't see your screen, remember."
+      ],
+      "stuckLines": [
+        "{{target}}, got it. But from where you are there's no way there in the moves you've got left. Undo or reset, then ask me again.",
+        "You've painted yourself into a corner. Undo a few and tell me when."
+      ],
+      "doneLines": [
+        "{{target}}? That one's already recovered. Look at you go."
+      ]
+    },
+    {
+      "id": "solve",
+      "when": "unlocked",
+      "puzzle": "badge",
+      "keywords": ["sequence", "order", "moves", "move", "solve", "steps", "step", "how", "route", "plan", "next"],
+      "doneLine": "BADGE.DB's recovered. No more sequences. Please. My brain is a screensaver.",
+      "lines": [
+        "The sequence? You want me to do the thinking too? XOR before you shift. Everything's crooked until you do.",
+        "Try the big XOR, then the key. Then think about which way it needs to slide, and how far. Nibbles are four bits, by the way.",
+        "Fine. By type, from where you are now: {{opTypes}}. Which XOR is which is your problem.",
+        "Still {{opTypes}}, by type. If you read me the TARGET row in 1s and 0s I can be less vague."
+      ],
+      "stuckLines": [
+        "From where you are? No way through in the moves you've got left. Undo or reset and ask again.",
+        "Out of road. Reset it. I won't tell Head Office."
+      ]
+    },
+    {
+      "id": "key",
+      "keywords": ["key", "keys", "mask", "override", "password", "code", "ns-02", "ns02", "log", "logs", "system", "????", "badge", "readout", "read out", "read-out", "policy", "trace"],
+      "requiresLevel": 2,
+      "lockedLines": [
+        "I can't open SYSTEM files. I'm on PROBATION. Fix PAYROLL.DAT and maybe Head Office will trust me with more than a stapler.",
+        "Still PROBATION. PAYROLL.DAT first. That's literally what the README says.",
+        "Access denied. My badge says INTERN in a font that really means it."
+      ],
+      "leaks": { "puzzle": "badge" },
+      "doneLine": "BADGE.DB is already open. I'm choosing to take credit for that.",
+      "unlockedLine": "Key's in. You're welcome. Now it's just the order of the moves. Ask me about the sequence, or read me the TARGET row.",
+      "lines": [
+        "What key? I'm an intern. I don't have keys. I have a lanyard.",
+        "There might be a log in a SYSTEM folder you can't see. Might. I'm not supposed to read it out.",
+        "It's NS-02.LOG. It says the key is 'read out per policy'. Nobody told me the policy. Ask again and I'll pretend I didn't hear.",
+        "Fine. FINE. It says: {{key}}. Hex, four digits. Type it into the key box on BADGE.DB and never tell Head Office.",
+        "I already told you: {{key}}. Hex. I'm writing it on my hand so one of us remembers."
+      ]
+    },
+    {
+      "id": "target",
+      "keywords": ["target", "pattern", "bits", "bit", "screen", "see", "look", "squares", "lights", "lit"],
+      "lines": [
+        "I can't see your screen. I'm on the other terminal. Read me the TARGET row as 1s and 0s, left to right? Lit is 1.",
+        "If you type the lit squares as 1s and 0s I could do maths about it. Probably. I failed maths. Once.",
+        "Sixteen squares, sixteen 1s and 0s. Like 0000 1010 0000 0101. Not that one. Yours."
+      ]
+    },
+    {
+      "id": "payroll",
+      "keywords": ["payroll", "payroll.dat", "salary", "pay", "bit rot", "bitrot", "corrupt", "corrupted"],
+      "lines": [
+        "PAYROLL.DAT? Accounts said it's 'acting up'. Accounts says that about the kettle.",
+        "The hint says wipe, mask, nudge. I'd read that as three moves in some order. Very helpful of me.",
+        "Try the XOR early. Or late. I'm an intern, not a fortune teller. There's an Undo button for a reason."
+      ]
+    },
+    {
+      "id": "who",
+      "keywords": ["who", "0117", "#0117", "supervisor", "ghost", "terminated", "name"],
+      "lines": [
+        "I'm #0118. First night. They said #0117 would supervise me. Have you seen them? You're sitting at their desk.",
+        "#0117 was terminated last month according to payroll. But their badge swiped in at 22:00. So. That's fine. Totally fine.",
+        "I'd rather not talk about #0117. The lights flicker when I type it."
+      ]
+    },
+    {
+      "id": "help",
+      "keywords": ["help", "stuck", "how", "hint", "what do i do", "lost", "confused"],
+      "lines": [
+        "Have you tried turning it off and on again? Kidding. Open README.TXT.",
+        "Shift+click selects a range. F2 renames. Some backups only open if you give them the right name.",
+        "Corrupted files open in BITROT.EXE. Line the bits up. If a button says ????, it needs a key, and keys live in logs. Logs I can read. Hint hint."
+      ]
+    },
+    {
+      "id": "hello",
+      "keywords": ["hi", "hello", "hey", "g'day", "gday", "yo", "evening", "sup"],
+      "thread": false,
+      "lines": [
+        "Hey. Is it always this quiet? The generator keeps making a noise like a sad cow.",
+        "Hi again. Still here. Still on probation.",
+        "Yes, hello. We've met. You're the one at the haunted desk."
+      ]
+    },
+    {
+      "id": "default",
+      "keywords": [],
+      "cycle": true,
+      "thread": false,
+      "lines": [
+        "Sorry, was on smoko.",
+        "Hmm? I'll put that in a ticket.",
+        "Could you ask that as a question about keys, logs, payroll or #0117? I only did a six week course.",
+        "Noted. Filed. Lost. That's the ACME way.",
+        "My connection's dodgy. If you've got a real AI intern, plug it in. I'm just the scripted one."
+      ]
+    }
+  ]
+}

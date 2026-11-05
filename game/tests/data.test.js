@@ -1,9 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { validatePuzzle, solve } from '../src/logic/puzzle.js';
+import { validatePuzzle, solve, parseWord } from '../src/logic/puzzle.js';
 import { createInitialState } from '../src/core/initialState.js';
 import { FILENAME_PATTERN } from '../src/core/reducer.js';
+import { MAX_LEVEL } from '../src/core/permissions.js';
+import { hexInWords } from '../src/logic/words.js';
+
+const APP_KINDS = ['intern'];
 
 const load = async (name) => JSON.parse(await readFile(new URL(`../data/${name}`, import.meta.url), 'utf8'));
 const files = await load('files.json');
@@ -37,7 +41,28 @@ test('files are well formed', () => {
     if (f.puzzleId) assert.ok(puzzleIds.has(f.puzzleId), `${f.id} references unknown puzzle ${f.puzzleId}`);
     if (f.renameUnlock) assert.match(f.renameUnlock, FILENAME_PATTERN);
     if (f.locked && !f.puzzleId) assert.ok(f.lockedMessage, `${f.id} is locked with no puzzle and no message`);
+    if (f.hidden !== undefined) assert.equal(typeof f.hidden, 'boolean', `${f.id}.hidden must be boolean`);
+    if (f.minLevel !== undefined) assert.ok(Number.isInteger(f.minLevel) && f.minLevel >= 0 && f.minLevel <= MAX_LEVEL, `${f.id}.minLevel out of range`);
+    if (f.type === 'app') assert.ok(APP_KINDS.includes(f.app), `${f.id} launches unknown app ${f.app}`);
+    if (files.find((p) => p.id === parent)?.hidden) {
+      assert.equal(f.hidden, true, `${f.id} lives in a hidden folder so it must be hidden too`);
+    }
   }
+});
+
+test('keyed puzzles genuinely need both sides', () => {
+  const hiddenText = files.filter((f) => f.hidden).map((f) => [f.content ?? []].flat().join('\n')).join('\n');
+  for (const p of puzzles.filter((x) => x.ops.some((op) => op.keyed))) {
+    assert.equal(solve(p, p.moveLimit, { withoutKeyed: true }), null, `${p.id} can be solved without its keyed op`);
+    assert.ok(p.playerHides?.includes('hex'), `${p.id} should hide hex from the player so the target must be described`);
+    for (const op of p.ops.filter((o) => o.keyed)) {
+      assert.ok(hiddenText.includes(hexInWords(parseWord(op.mask))), `${p.id} key is not written in words in any hidden file`);
+    }
+  }
+});
+
+test('at least one puzzle escalates intern permissions', () => {
+  assert.ok(puzzles.some((p) => p.onSolve?.internLevel > 1));
 });
 
 test('shipped data builds a valid initial state', () => {

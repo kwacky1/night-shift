@@ -25,19 +25,29 @@ let bootTimers = [];
 let bootStarted = false;
 let skipHandler = null;
 
+const stopSkipListening = () => {
+  if (!skipHandler) return;
+  window.removeEventListener('keydown', skipHandler);
+  window.removeEventListener('pointerdown', skipHandler);
+  skipHandler = null;
+};
+
 const finishBoot = (dispatch) => {
   bootTimers.forEach(clearTimeout);
   bootTimers = [];
-  if (skipHandler) {
-    window.removeEventListener('keydown', skipHandler);
-    window.removeEventListener('pointerdown', skipHandler);
-    skipHandler = null;
-  }
+  stopSkipListening();
   dispatch(actions.bootComplete());
 };
 
 export const renderBoot = (root, state, dispatch) => {
-  if (state.phase !== 'boot' || bootStarted) return;
+  // Boot can also end without finishBoot (a loaded save, DevTools); don't keep eating keys.
+  if (state.phase !== 'boot') {
+    bootTimers.forEach(clearTimeout);
+    bootTimers = [];
+    stopSkipListening();
+    return;
+  }
+  if (bootStarted) return;
   bootStarted = true;
   root.innerHTML = '';
   let t = 200;
