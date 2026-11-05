@@ -52,6 +52,22 @@
       ]
     },
     {
+      "id": "power",
+      "keywords": ["power", "drive", "driving", "geargrind", "geargr~1", "geargr~1.exe", "gear", "gears", "clutch", "generator", "genny", "brownout", "blackout", "flicker", "flickering", "dim", "mainframe", "battery", "juice", "stall", "stalled", "electricity"],
+      "lowLines": [
+        "Power's at {{power}}. I can't drive, I'm on a terminal. You've got the clutch. GEARGR~1.EXE. Go.",
+        "{{power}}! The lights are doing the thing. Please go and drive the generator.",
+        "Mainframe at {{power}}. If it hits zero we both go home, and I don't think either of us gets paid."
+      ],
+      "lines": [
+        "Mainframe's on {{power}}. Generator 2 tops it up, but only if somebody drives it. Somebody is you. I can't reach the pedals from here.",
+        "GEARGR~1.EXE. Clutch in, pick a gear, clutch out. Uphill wants a low gear, downhill wants a high one. Too low and it screams, too high and it bogs.",
+        "Keep the rev needle in the green band and it charges fastest. Space is the clutch. Left Shift down, Right Shift up. You can rebind them in the window.",
+        "Below 30% the line browns out and I can't touch your sectors. Below 15% Bit Rot won't run at all. At zero, lights out. Shift over.",
+        "Power's {{power}}. I'll nag. It's the one thing I'm good at."
+      ]
+    },
+    {
       "id": "solve",
       "when": "unlocked",
       "puzzle": "badge",
@@ -124,22 +140,6 @@
         "It says the override was run every night at 22:00 by #0117. Every night. Including tonight. I'm going to read it out before I lose my nerve.",
         "Override key, read out per policy: {{key}}. Hex. Type it into the key box on TIMECLK.DAT. I need a lie down.",
         "Still {{key}}. It hasn't changed. Nothing in this building changes."
-      ]
-    },
-    {
-      "id": "power",
-      "keywords": ["power", "drive", "driving", "geargrind", "geargr~1", "geargr~1.exe", "gear", "gears", "clutch", "generator", "genny", "brownout", "blackout", "flicker", "flickering", "dim", "mainframe", "battery", "juice", "stall", "stalled", "electricity"],
-      "lowLines": [
-        "Power's at {{power}}. I can't drive, I'm on a terminal. You've got the clutch. GEARGR~1.EXE. Go.",
-        "{{power}}! The lights are doing the thing. Please go and drive the generator.",
-        "Mainframe at {{power}}. If it hits zero we both go home, and I don't think either of us gets paid."
-      ],
-      "lines": [
-        "Mainframe's on {{power}}. Generator 2 tops it up, but only if somebody drives it. Somebody is you. I can't reach the pedals from here.",
-        "GEARGR~1.EXE. Clutch in, pick a gear, clutch out. Uphill wants a low gear, downhill wants a high one. Too low and it screams, too high and it bogs.",
-        "Keep the rev needle in the green band and it charges fastest. Space is the clutch. Left Shift down, Right Shift up. You can rebind them in the window.",
-        "Below 30% the line browns out and I can't touch your sectors. Below 15% Bit Rot won't run at all. At zero, lights out. Shift over.",
-        "Power's {{power}}. I'll nag. It's the one thing I'm good at."
       ]
     },
     {

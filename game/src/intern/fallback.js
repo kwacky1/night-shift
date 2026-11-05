@@ -82,8 +82,9 @@ export const topicFor = (script, text, state = {}) => {
   const last = lastId ? script.topics.find((t) => t.id === lastId && (t.detect || isEligible(state, t))) : undefined;
   if (last && isFollowUp(script, lower)) return last;
   const hits = script.topics.filter((t) => isEligible(state, t) && t.keywords.some((k) => matches(lower, k)));
-  // "the key?" means the key for the sector in front of the player, not the first one in the file.
-  const focus = hits.length > 1 && state.puzzles ? focusPuzzle(state)?.id : undefined;
+  // "the key" means the key for the sector in front of the player, not the first one in the file.
+  // Only sector topics are re-ordered; a general topic that matches first still wins.
+  const focus = hits.length > 1 && topicPuzzle(hits[0]) && state.puzzles ? focusPuzzle(state)?.id : undefined;
   const hit = (focus && hits.find((t) => topicPuzzle(t) === focus)) || hits[0];
   return hit ?? last ?? script.topics.find((t) => t.id === 'default');
 };

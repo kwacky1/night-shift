@@ -324,3 +324,9 @@ test('validateScript checks the new fields', () => {
   assert.match(broken((s) => s.nag.lines.push('{{key}}')), /nag: placeholder/);
   assert.match(broken((s) => (s.nag.colour = 'red')), /nag: unknown field/);
 });
+
+test('power questions are about power even with a sector in front of the player', () => {
+  const s = reducer(unlocked(), actions.openFile('badge'));
+  assert.equal(topicFor(script, 'how do I keep the power up?', s).id, 'power');
+  assert.equal(topicFor(script, 'how do I do this', s).id, 'solve');
+});
