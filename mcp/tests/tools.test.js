@@ -168,6 +168,7 @@ test('PROBATION interns can shift but not XOR', async () => {
   assert.equal(game.store.getState().puzzles.payroll.history.length, 1);
   assert.match((await call('shift_left', { puzzle: 'payroll', n: 7 })).text, /no << 7 op/);
   assert.equal((await call('xor', { puzzle: 'payroll', mask: 'banana' })).isError, true);
+  assert.equal((await call('enter_key', { puzzle: 'badge', key: 'banana' })).isError, true);
 });
 
 test('end to end: solve payroll together, get promoted, read the key, recover the badge', async () => {
@@ -192,13 +193,23 @@ test('end to end: solve payroll together, get promoted, read the key, recover th
 
   // Badge: XOR FF00, keyed XOR 0117, << 4, XOR FF00 -> 0x0FF0.
   await call('xor', { puzzle: 'badge', mask: '0xFF00' });
-  const keyed = await call('xor', { puzzle: 'badge', mask: '0x0117' });
+  // Keys are always hex, however they're typed: words unlock, bare digits apply.
+  assert.match((await call('enter_key', { puzzle: 'badge', key: 'zero, one, one, seven' })).text, /Key accepted/);
+  const keyed = await call('xor', { puzzle: 'badge', mask: '0117' });
   assert.match(keyed.text, /Applied XOR 0x0117/);
   assert.deepEqual(store.getState().puzzles.badge.unlocked, [3]);
   await call('shift_left', { puzzle: 'badge' });
   const done = await call('xor', { puzzle: 'badge', mask: '0xFF00' });
   assert.match(done.text, /SECTOR RECOVERED/);
   assert.equal(store.getState().puzzles.badge.solved, true);
+});
+
+test('xor with a bare-digit key unlocks and applies in one go', async () => {
+  const store = newStore();
+  store.dispatch({ type: 'HYDRATE', state: { ...store.getState(), intern: { ...store.getState().intern, level: 2 } } });
+  await connectGame(store);
+  assert.match((await call('xor', { puzzle: 'badge', mask: '117' })).text, /Applied XOR 0x0117/);
+  assert.match((await call('xor', { puzzle: 'payroll', mask: '0117' })).text, /No XOR with mask 0117/);
 });
 
 test('the agent cannot smuggle in other actions', async () => {

@@ -2,8 +2,9 @@
 // Uses structural sharing so the UI can cheaply tell which slices changed.
 import { ActionTypes as T } from './actions.js';
 import { childrenOf, clockMinutes, formatClock, windowForFile } from './selectors.js';
-import { applyOp, isSolved, opLabel, parseNumber } from '../logic/puzzle.js';
+import { applyOp, isSolved, opLabel } from '../logic/puzzle.js';
 import { toHex, toWord } from '../logic/bits.js';
+import { parseKey } from '../logic/words.js';
 import { clampLevel, internActionError, internLevel, isOpUnlocked, levelInfo } from './permissions.js';
 
 const LOG_LIMIT = 100;
@@ -156,8 +157,8 @@ const enterKey = (state, action) => {
   if (!p || !op?.keyed || p.solved || isOpUnlocked(p, action.opIndex)) return state;
   if (action.actor === 'intern' && internActionError(state, action)) return state;
   const who = action.actor === 'intern' ? '#0118' : 'Sysadmin';
-  const mask = parseNumber(action.mask);
-  if (!Number.isInteger(mask) || toWord(mask) !== op.mask || mask > 0xffff) {
+  const mask = parseKey(action.mask);
+  if (!Number.isInteger(mask) || toWord(mask) !== op.mask) {
     const s = log(state, `${who} entered a bad key for ${p.id}.`);
     return action.actor === 'intern' ? s : alert(s, 'BITROT.EXE', 'KEY REJECTED.\n\nThat is not the override key for this sector.');
   }
@@ -175,6 +176,13 @@ const chatSend = (state, action) => {
     extra.scripted = true;
   }
   let s = post(state, from, text, extra);
+  if (extra.scripted && typeof action.thread === 'string' && /^[a-z0-9_-]{1,32}$/i.test(action.thread)) {
+    s = { ...s, intern: { ...s.intern, lastTopic: action.thread } };
+  }
+  const heard = s.intern.heardTargets ?? [];
+  if (extra.scripted && typeof action.heardTarget === 'string' && s.puzzles[action.heardTarget] && !heard.includes(action.heardTarget)) {
+    s = { ...s, intern: { ...s.intern, heardTargets: [...heard, action.heardTarget] } };
+  }
   if (extra.scripted && typeof action.topic === 'string') {
     const pester = { ...s.intern.pester, [action.topic]: (s.intern.pester[action.topic] ?? 0) + 1 };
     s = { ...s, intern: { ...s.intern, pester } };

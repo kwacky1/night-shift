@@ -33,7 +33,7 @@ const REMOTE_ACTIONS = {
     return { type: ActionTypes.PUZZLE_APPLY_OP, puzzleId: a.puzzleId, opIndex: a.opIndex };
   },
   [ActionTypes.PUZZLE_ENTER_KEY]: (a) => {
-    if (!isId(a.puzzleId) || !isIndex(a.opIndex) || typeof a.mask !== 'string' || a.mask.length > 18) throw new Error('Bad PUZZLE_ENTER_KEY');
+    if (!isId(a.puzzleId) || !isIndex(a.opIndex) || typeof a.mask !== 'string' || a.mask.length > 64) throw new Error('Bad PUZZLE_ENTER_KEY');
     return { type: ActionTypes.PUZZLE_ENTER_KEY, puzzleId: a.puzzleId, opIndex: a.opIndex, mask: a.mask };
   },
   [ActionTypes.CHAT_SEND]: (a) => {

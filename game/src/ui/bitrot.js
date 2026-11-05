@@ -77,7 +77,7 @@ export const bitrotView = {
         .join('')}</div>
       ${
         keyedLocked.length && !p.solved
-          ? `<form class="keyrow" data-op="${keyedLocked[0]}"><label>OVERRIDE KEY</label><input name="key" maxlength="6" placeholder="0x...." autocomplete="off" spellcheck="false" value="${esc(typedKey)}" /><button type="submit">Enter</button></form>`
+          ? `<form class="keyrow" data-op="${keyedLocked[0]}"><label>OVERRIDE KEY</label><input name="key" maxlength="32" placeholder="0x...." autocomplete="off" spellcheck="false" value="${esc(typedKey)}" /><button type="submit">Enter</button></form>`
           : ''
       }
       <div class="trail">${trail}</div>`;

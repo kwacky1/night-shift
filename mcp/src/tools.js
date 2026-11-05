@@ -4,6 +4,7 @@
 import { z } from 'zod';
 import { internActionError } from '../../game/src/core/permissions.js';
 import { toHex } from '../../game/src/logic/bits.js';
+import { parseKey } from '../../game/src/logic/words.js';
 import { NotConnectedError } from './link.js';
 import * as view from './projection.js';
 
@@ -161,37 +162,39 @@ export const createTools = (link, { port = link.port } = {}) => {
       title: 'XOR with a mask',
       description:
         'Apply one of the sector\'s XOR ops by giving its mask (e.g. "0xFF00"). For a keyed (redacted) XOR, give the override key: it is entered first, then applied. Needs OPERATOR clearance. Costs one move.',
-      inputSchema: { puzzle: puzzleArg, mask: z.string().min(1).max(18).describe('Mask as hex (0x0F0F), binary (0b...) or decimal') },
+      inputSchema: { puzzle: puzzleArg, mask: z.string().min(1).max(64).describe('Mask as hex (0x0F0F), binary (0b...) or decimal. For the redacted key: hex digits or words, e.g. 0x1234, 1234 or "one two three four" (keys are always hex)') },
       handler: withGame(async (state, { puzzle: query, mask }) => {
         const { puzzle, error } = findPuzzle(state, query);
         if (error) return error;
         const value = view.parseMask(mask);
-        if (value === null) return fail(`"${mask}" is not a 16-bit value. Try hex like 0x0F0F.`);
-        const i = puzzle.ops.findIndex((op) => op.type === 'xor' && op.mask === value);
-        const keyedIndex = puzzle.ops.findIndex((op, j) => op.keyed && !(puzzle.unlocked ?? []).includes(j));
-        if (i >= 0) {
-          const extra = puzzle.ops[i].keyed && !(puzzle.unlocked ?? []).includes(i) ? [{ type: 'PUZZLE_ENTER_KEY', puzzleId: puzzle.id, opIndex: i, mask: toHex(value) }] : [];
-          return runOp(puzzle, i, extra);
-        }
-        if (keyedIndex >= 0) {
-          const denied = internActionError(state, { type: 'PUZZLE_ENTER_KEY', puzzleId: puzzle.id, opIndex: keyedIndex, actor: 'intern' });
-          if (denied) return text(denied);
-          await link.dispatch({ type: 'PUZZLE_ENTER_KEY', puzzleId: puzzle.id, opIndex: keyedIndex, mask: toHex(value) });
-          return text(`KEY REJECTED: ${toHex(value)} is not the override key, and it matches no visible XOR on this sector.`);
-        }
-        return text(`No XOR with mask ${toHex(value)} on this sector.`);
+        const key = parseKey(mask);
+        if (value === null && Number.isNaN(key)) return fail(`"${mask}" is not a 16-bit value. Try hex like 0x0F0F.`);
+        const unlocked = puzzle.unlocked ?? [];
+        const visible = (op, j) => op.type === 'xor' && (!op.keyed || unlocked.includes(j));
+        let i = puzzle.ops.findIndex((op, j) => visible(op, j) && op.mask === value);
+        if (i < 0) i = puzzle.ops.findIndex((op, j) => visible(op, j) && op.mask === key);
+        if (i >= 0) return runOp(puzzle, i);
+        const keyedIndex = puzzle.ops.findIndex((op, j) => op.keyed && !unlocked.includes(j));
+        if (keyedIndex < 0 || Number.isNaN(key)) return text(`No XOR with mask ${mask} on this sector.`);
+        const action = { type: 'PUZZLE_ENTER_KEY', puzzleId: puzzle.id, opIndex: keyedIndex, mask: toHex(key) };
+        const denied = internActionError(state, { ...action, actor: 'intern' });
+        if (denied) return text(denied);
+        const res = await link.dispatch(action);
+        if (!res.ok) return text(`The game refused: ${res.error}`);
+        if ((link.state.puzzles[puzzle.id].unlocked ?? []).includes(keyedIndex)) return runOp(puzzle, keyedIndex);
+        return text(`KEY REJECTED: ${toHex(key)} is not the override key, and it matches no visible XOR on this sector.`);
       }),
     },
     {
       name: 'enter_key',
       title: 'Enter an override key',
       description: 'Unlock a keyed (redacted) XOR op without applying it, so the sysadmin can use it too. Needs OPERATOR clearance. Does not cost a move.',
-      inputSchema: { puzzle: puzzleArg, key: z.string().min(1).max(18).describe('The key as hex, e.g. 0x1234') },
+      inputSchema: { puzzle: puzzleArg, key: z.string().min(1).max(64).describe('The key. Always hex: 0x1234, 1234 or "one, two, three, four"') },
       handler: withGame(async (state, { puzzle: query, key }) => {
         const { puzzle, error } = findPuzzle(state, query);
         if (error) return error;
-        const value = view.parseMask(key);
-        if (value === null) return fail(`"${key}" is not a 16-bit value.`);
+        const value = parseKey(key);
+        if (Number.isNaN(value)) return fail(`"${key}" is not a key. Keys are four hex digits, like 0x1234, 1234 or "one, two, three, four".`);
         const opIndex = puzzle.ops.findIndex((op, j) => op.keyed && !(puzzle.unlocked ?? []).includes(j));
         if (opIndex < 0) return text('Nothing on this sector needs a key.');
         const action = { type: 'PUZZLE_ENTER_KEY', puzzleId: puzzle.id, opIndex, mask: toHex(value) };
