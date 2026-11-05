@@ -20,3 +20,12 @@ _Last updated: 04/11/2026_
 ## Next (week 3)
 - Gear Grind power mechanic + story arc. More permission escalations over the night.
 - Consider publishing night-shift-mcp (bundle the game modules).
+
+## Playtest handover (04/11/2026)
+- Local game server and MCP bridge were running at `http://localhost:8080` and `ws://localhost:7117`.
+- Multiple open game windows competed for the single intern connection; the newest window to click **Dial** takes over.
+- Active playtest state: PAYROLL.DAT recovered, intern #0118 promoted to OPERATOR, BADGE.DB still corrupted.
+- BADGE.DB current value was `0x0118`; player described target as `0000 1111 1111 0000` (`0x0FF0`).
+- Hidden audit revealed the keyed XOR override `0x0117`.
+- Verified four-move solution, not yet applied: `XOR 0xFF00` -> keyed `XOR 0x0117` -> `<< 4` -> `XOR 0xFF00`.
+- The intern line dropped before the player could approve execution. Resume by opening INTERN.EXE, dialling `ws://localhost:7117`, checking current state, and agreeing the move plan before applying it.
