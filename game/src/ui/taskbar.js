@@ -1,6 +1,7 @@
 // Taskbar (start button, window buttons, tray clock), start menu and the modal alert box.
 import { actions } from '../core/actions.js';
 import { clockLabel, unreadForPlayer } from '../core/selectors.js';
+import { isBrownout, powerLevel, powerStatus } from '../core/power.js';
 import { esc, ui } from './dom.js';
 import { iconSvg } from './icons.js';
 import { titleFor, iconForWindow } from './windows.js';
@@ -10,6 +11,7 @@ const MENU = [
   { id: 'drive', label: 'C: Drive', icon: 'drive' },
   { id: 'payroll', label: 'PAYROLL.DAT', icon: 'corrupt' },
   { id: 'intern', label: 'INTERN.EXE', icon: 'system' },
+  { id: 'geargrind', label: 'GEARGRIND.EXE', icon: 'gear' },
   { sep: true },
   { act: 'reset', label: 'Shut Down (wipe save)...', icon: 'system' },
 ];
@@ -18,7 +20,7 @@ export const initTaskbar = (bar, menu, ctx) => {
   bar.innerHTML = `
     <button type="button" class="start"><span class="moon">&#9790;</span>Start</button>
     <div class="tasks"></div>
-    <div class="tray"><button type="button" class="intern" title="Open INTERN.EXE">INTERN: SCRIPTED</button><span class="clock"></span></div>`;
+    <div class="tray"><button type="button" class="power" title="Mainframe power. Open GEARGRIND.EXE to charge it.">PWR</button><button type="button" class="intern" title="Open INTERN.EXE">INTERN: SCRIPTED</button><span class="clock"></span></div>`;
   menu.className = 'raised';
   menu.innerHTML = `<div class="stripe">NightOS 3.11</div><ul>${MENU.map((m) =>
     m.sep ? '<li class="sep"></li>' : `<li data-open="${m.id ?? ''}" data-act="${m.act ?? ''}">${iconSvg(m.icon)}${esc(m.label)}</li>`,
@@ -47,6 +49,9 @@ export const initTaskbar = (bar, menu, ctx) => {
   bar.querySelector('.tray .intern').addEventListener('click', () => {
     if (ctx.getState().files.intern) ctx.dispatch(actions.openFile('intern'));
   });
+  bar.querySelector('.tray .power').addEventListener('click', () => {
+    if (ctx.getState().files.geargrind) ctx.dispatch(actions.openFile('geargrind'));
+  });
 
   bar.querySelector('.tasks').addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-win]');
@@ -65,12 +70,18 @@ export const renderTaskbar = (bar, state, prev) => {
   if (clock.textContent !== label) clock.textContent = label;
   const intern = bar.querySelector('.intern');
   const unread = unreadForPlayer(state);
-  const mode = { online: 'ONLINE', connecting: 'DIALLING' }[ui.internStatus] ?? 'SCRIPTED';
+  const mode = ui.internStatus === 'taken' ? 'LINE TAKEN' : isBrownout(state) ? 'BROWNOUT' : ({ online: 'ONLINE', connecting: 'DIALLING' }[ui.internStatus] ?? 'SCRIPTED');
   const text = `INTERN: ${mode}${unread ? ` (${unread})` : ''}`;
   if (intern.textContent !== text) intern.textContent = text;
   intern.dataset.status = ui.internStatus;
   intern.classList.toggle('online', ui.internStatus === 'online');
+  intern.classList.toggle('taken', ui.internStatus === 'taken');
   intern.classList.toggle('unread', unread > 0);
+  const power = bar.querySelector('.power');
+  const status = powerStatus(state);
+  const powerText = `PWR ${Math.ceil(powerLevel(state))}%${state.power?.generator?.stalled ? ' STALL' : ''}`;
+  if (power.textContent !== powerText) power.textContent = powerText;
+  power.dataset.status = status;
   if (prev && prev.windows === state.windows && prev.focusedWindowId === state.focusedWindowId && prev.files === state.files) return;
   bar.querySelector('.tasks').innerHTML = [...state.windows]
     .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))

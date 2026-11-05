@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { isLocalSocketUrl, handleBridgeMessage, sanitiseRemoteAction, REMOTE_ACTION_TYPES } from '../src/bridge/api.js';
+import { isLocalSocketUrl, handleBridgeMessage, sanitiseRemoteAction, REMOTE_ACTION_TYPES, connectIntern, LINE_TAKEN_CODE, QUIET_ATTEMPTS } from '../src/bridge/api.js';
 import { createStore } from '../src/core/store.js';
 import { reducer } from '../src/core/reducer.js';
 import { actions } from '../src/core/actions.js';
@@ -63,4 +63,126 @@ test('handleBridgeMessage ignores junk without throwing', () => {
     assert.equal(handleBridgeMessage(store, raw), null);
   }
   assert.equal(store.getState(), before);
+});
+
+// ---- connectIntern with a fake socket and fake timers ---------------------------------------
+
+const fakeNet = () => {
+  const sockets = [];
+  class FakeSocket {
+    static OPEN = 1;
+    constructor(url) {
+      this.url = url;
+      this.readyState = 0;
+      this.sent = [];
+      this.listeners = {};
+      sockets.push(this);
+    }
+    addEventListener(type, fn) {
+      (this.listeners[type] ??= []).push(fn);
+    }
+    emit(type, event = {}) {
+      for (const fn of this.listeners[type] ?? []) fn(event);
+    }
+    send(text) {
+      this.sent.push(JSON.parse(text));
+    }
+    close() {
+      this.readyState = 3;
+    }
+    accept() {
+      this.readyState = 1;
+      this.emit('open');
+    }
+    drop(code = 1006) {
+      this.readyState = 3;
+      this.emit('close', { code });
+    }
+  }
+  const timers = [];
+  let clock = 0;
+  const setTimer = (fn, ms) => {
+    const t = { fn, at: clock + ms, done: false };
+    timers.push(t);
+    return t;
+  };
+  const clearTimer = (t) => t && (t.done = true);
+  const advance = (ms) => {
+    clock += ms;
+    for (const t of timers) if (!t.done && t.at <= clock) {
+      t.done = true;
+      t.fn();
+    }
+  };
+  return { sockets, FakeSocket, opts: { WebSocketImpl: FakeSocket, setTimer, clearTimer, now: () => clock }, advance, timers };
+};
+
+test('another window taking the line reports "taken" and does not redial', () => {
+  const net = fakeNet();
+  const statuses = [];
+  connectIntern('ws://localhost:7117', gameStore(), (s) => statuses.push(s), net.opts);
+  net.sockets[0].accept();
+  net.sockets[0].drop(LINE_TAKEN_CODE);
+  assert.equal(statuses.at(-1), 'taken');
+  net.advance(60000);
+  assert.equal(net.sockets.length, 1, 'no automatic redial after losing the line');
+});
+
+test('an ordinary drop keeps redialling with backoff', () => {
+  const net = fakeNet();
+  const statuses = [];
+  connectIntern('ws://localhost:7117', gameStore(), (s) => statuses.push(s), net.opts);
+  net.sockets[0].accept();
+  net.sockets[0].drop();
+  assert.equal(statuses.at(-1), 'connecting');
+  net.advance(1000);
+  assert.equal(net.sockets.length, 2);
+  net.sockets[1].drop();
+  net.advance(1000);
+  assert.equal(net.sockets.length, 2, 'backs off to 2 s');
+  net.advance(1000);
+  assert.equal(net.sockets.length, 3);
+});
+
+test('a quiet auto-dial stays SCRIPTED while it tries, then gives up', () => {
+  const net = fakeNet();
+  const statuses = [];
+  connectIntern('ws://localhost:7117', gameStore(), (s) => statuses.push(s), { ...net.opts, quiet: true });
+  for (let i = 0; i < QUIET_ATTEMPTS; i++) {
+    net.sockets.at(-1).drop();
+    net.advance(10000);
+  }
+  assert.equal(net.sockets.length, QUIET_ATTEMPTS);
+  assert.ok(statuses.every((s) => s === 'offline'), `never shows DIALLING: ${statuses.join(',')}`);
+  net.advance(60000);
+  assert.equal(net.sockets.length, QUIET_ATTEMPTS, 'gave up');
+});
+
+test('a quiet auto-dial that gets through is a normal line', () => {
+  const net = fakeNet();
+  const statuses = [];
+  connectIntern('ws://localhost:7117', gameStore(), (s) => statuses.push(s), { ...net.opts, quiet: true });
+  net.sockets[0].drop();
+  net.advance(1000);
+  net.sockets[1].accept();
+  assert.equal(statuses.at(-1), 'online');
+  assert.equal(net.sockets[1].sent[0].type, 'hello');
+  net.sockets[1].drop();
+  assert.equal(statuses.at(-1), 'connecting', 'after being online, a drop shows as redialling');
+});
+
+test('noisy state updates are coalesced, everything else is sent at once', () => {
+  const net = fakeNet();
+  const store = gameStore();
+  connectIntern('ws://localhost:7117', store, () => {}, net.opts);
+  const sock = net.sockets[0];
+  sock.accept();
+  const states = () => sock.sent.filter((m) => m.type === 'state').map((m) => m.action);
+  for (let i = 0; i < 8; i++) store.dispatch(actions.driveReport({ charge: 0.5, running: true, gear: 2, rpm: 3000 + i }));
+  assert.deepEqual(states(), [], 'nothing yet: within the coalescing window');
+  net.advance(1000);
+  assert.deepEqual(states(), ['DRIVE_REPORT'], 'one trailing update');
+  assert.equal(sock.sent.at(-1).state.power.generator.rpm, 3007, 'with the latest state');
+  store.dispatch(actions.chatSend('hello'));
+  assert.deepEqual(states(), ['DRIVE_REPORT', 'CHAT_SEND'], 'chat goes straight through');
 });

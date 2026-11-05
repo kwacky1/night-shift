@@ -104,9 +104,9 @@ const boot = async () => {
     newShift: () => store.dispatch(actions.newShift(createInitialState(data))),
     intern: {
       url: () => bridge?.url ?? savedUrl() ?? DEFAULT_INTERN_URL,
-      dial: (url) => {
+      dial: (url, { quiet = false } = {}) => {
         bridge?.close();
-        bridge = connectIntern(url, store, setInternStatus);
+        bridge = connectIntern(url, store, setInternStatus, { quiet });
         if (!bridge) {
           store.dispatch(actions.chatSend(`Refusing to dial ${url}. Only ws://localhost or ws://127.0.0.1 addresses are allowed.`, 'intern', { scripted: true }));
           return;
@@ -149,9 +149,10 @@ const boot = async () => {
     else if (!saveTimer) saveTimer = setTimeout(saveNow, SAVE_THROTTLE_MS);
   });
 
-  // The scripted fallback intern answers only when no real (MCP) intern is on the line.
+  // The scripted fallback intern answers only when no real (MCP) intern is on the line, and stays
+  // quiet when another window has taken the line (this window's INTERN.EXE says so instead).
   const scriptedIntern = (text) => {
-    if (ui.internStatus === 'online') return;
+    if (ui.internStatus === 'online' || ui.internStatus === 'taken') return;
     ui.internTyping = true;
     ctx.rerender();
     setTimeout(() => {
@@ -198,8 +199,11 @@ const boot = async () => {
   });
 
   exposeApi(store);
-  const internUrl = new URLSearchParams(location.search).get('intern') ?? savedUrl();
-  if (internUrl && isLocalSocketUrl(internUrl)) ctx.intern.dial(internUrl);
+  // ?intern=ws://... dials straight away. A saved address from last time is tried quietly in the
+  // background (with backoff); if nothing answers, the scripted intern stays on duty.
+  const queryUrl = new URLSearchParams(location.search).get('intern');
+  const internUrl = queryUrl ?? savedUrl();
+  if (internUrl && isLocalSocketUrl(internUrl)) ctx.intern.dial(internUrl, { quiet: !queryUrl });
 
   render(store.getState(), null);
 };
