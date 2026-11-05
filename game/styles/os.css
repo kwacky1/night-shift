@@ -287,8 +287,14 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
 }
 .bits span.on { background: var(--phosphor); box-shadow: 0 0 6px var(--phosphor); border-color: #9fffb8; }
 .bits.target span.on { background: #1d6a35; box-shadow: none; border-color: #2c8a48; }
-.bits span.off-wrong { border-color: #6a3c00; }
+.bits span.off-wrong { border: 2px dashed var(--amber); background: rgba(255, 176, 0, 0.12); }
 .bits span.on.wrong { background: var(--amber); box-shadow: 0 0 6px var(--amber); border-color: #ffd27a; }
+.bitrot .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font: 11px var(--mono); color: #9fd8ae; }
+.bitrot .legend span { display: inline-flex; align-items: center; gap: 5px; }
+.bitrot .legend i { width: 11px; height: 11px; box-sizing: border-box; background: #0b2014; border: 1px solid #143820; }
+.bitrot .legend i.on { background: var(--phosphor); border-color: #9fffb8; }
+.bitrot .legend i.on.wrong { background: var(--amber); border-color: #ffd27a; }
+.bitrot .legend i.off-wrong { border: 2px dashed var(--amber); background: rgba(255, 176, 0, 0.12); }
 .bitrot.solved .bits:not(.target) span.on { background: #9fffb8; }
 .ops { display: flex; flex-wrap: wrap; gap: 6px; }
 .ops button { font-family: var(--mono); min-width: 96px; }
