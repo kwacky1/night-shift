@@ -1,6 +1,6 @@
 # Session state - NIGHT_SHIFT.EXE
 
-_Last updated: 04/11/2026_
+_Last updated: 05/11/2026_
 
 ## Status
 - Week 1 (OS shell + PAYROLL.DAT Bit Rot) is merged to `main`.
@@ -29,3 +29,12 @@ _Last updated: 04/11/2026_
 - Hidden audit revealed the keyed XOR override `0x0117`.
 - Verified four-move solution, not yet applied: `XOR 0xFF00` -> keyed `XOR 0x0117` -> `<< 4` -> `XOR 0xFF00`.
 - The intern line dropped before the player could approve execution. Resume by opening INTERN.EXE, dialling `ws://localhost:7117`, checking current state, and agreeing the move plan before applying it.
+
+
+## Fallback playtest fixes (05/11/2026)
+- Override keys are always hex: `parseKey` (game/src/logic/words.js) accepts `0x0117`, `0117`, `117` and words. The reducer and the MCP enter_key/xor tools both use it.
+- The scripted intern tracks `intern.lastTopic`, so follow-ups (please, go on, ?) and unmatched messages continue the thread. Readout and policy questions go to the key topic, and 'you' no longer means #0117.
+- A `solve` topic (only after the key is unlocked) gives escalating hints, then op types from the BFS route.
+- The `pattern` detector reads 16-bit rows as CURRENT or TARGET from nearby words. A heard target (`intern.heardTargets`) gets a full route from the real current value. A mismatched current gets an in-character correction.
+- Fixed: the boot skip handler kept eating the first key when boot ended without a skip (DevTools or hydrate).
+- 102 unit tests pass. `npm run smoke` passes 30 checks, including a scripted-intern replay of the playtest.
