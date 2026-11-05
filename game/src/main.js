@@ -19,7 +19,7 @@ import { renderShiftEnd } from './ui/shiftend.js';
 import { geargrindView } from './ui/geargrind.js';
 import { powerStatus } from './core/power.js';
 import { connectIntern, exposeApi, isLocalSocketUrl } from './bridge/api.js';
-import { fallbackReply } from './intern/fallback.js';
+import { fallbackNag, fallbackReply } from './intern/fallback.js';
 import { unreadForPlayer } from './core/selectors.js';
 
 const SAVE_KEY = 'night-shift:save';
@@ -159,6 +159,7 @@ const boot = async () => {
   store.subscribe((state, prev, action) => {
     render(state, prev);
     if (action.type === ActionTypes.CHAT_SEND && !action.actor && action.from !== 'intern') scriptedIntern(action.text);
+    if (action.type !== ActionTypes.HYDRATE) scriptedNag(state, prev);
     const chatOpen = state.windows.some((w) => w.kind === 'intern' && !w.minimised);
     if (chatOpen && unreadForPlayer(state) > 0) setTimeout(() => store.dispatch(actions.chatRead()), 0);
     if (action.type === ActionTypes.NEW_SHIFT) localStorage.removeItem(SAVE_KEY);
@@ -181,6 +182,13 @@ const boot = async () => {
       const { text: line, ...extra } = reply;
       store.dispatch(actions.chatSend(line, 'intern', { ...extra, scripted: true }));
     }, 700 + Math.random() * 900);
+  };
+
+  // Unprompted: the scripted intern nags about mainframe power (a real intern does its own nagging).
+  const scriptedNag = (state, prev) => {
+    if (ui.internStatus === 'online' || ui.internStatus === 'taken') return;
+    const nag = fallbackNag(prev, state, internScript);
+    if (nag) setTimeout(() => store.dispatch(actions.chatSend(nag.text, 'intern', { topic: nag.topic, scripted: true })), 0);
   };
 
   // One game minute every clock.msPerMinute real milliseconds (data/night.json).

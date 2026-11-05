@@ -1,4 +1,17 @@
 {
+  "nag": {
+    "everyMinutes": 30,
+    "lines": [
+      "Power's at {{power}}. Just saying. GEARGR~1.EXE is on your desktop and I can't reach the pedals.",
+      "Mainframe {{power}}. Could you go and drive for a bit? I'll hold the fort. The fort is a chair.",
+      "{{power}} and dropping. The generator needs you. I'd do it myself but I'm a terminal session."
+    ],
+    "brownoutLines": [
+      "BROWNOUT. {{power}}. My line's all crackly and they've cut my remote access. Drive! Please!",
+      "{{power}}. I can still type but I can't touch anything. Clutch in, gear, clutch out. Go go go.",
+      "We're at {{power}}. If this goes dark it's the end of the shift. Ask me how I know."
+    ]
+  },
   "followUps": ["please", "pls", "plz", "again", "go on", "come on", "and", "so", "well", "seriously", "really", "huh", "mate", "now"],
   "topics": [
     {
@@ -56,6 +69,23 @@
       ]
     },
     {
+      "id": "timesolve",
+      "when": "unlocked",
+      "puzzle": "timeclk",
+      "keywords": ["sequence", "order", "moves", "move", "solve", "steps", "step", "how", "route", "plan", "next"],
+      "doneLine": "TIMECLK.DAT's reconciled. I've read it. I wish I hadn't.",
+      "lines": [
+        "The time clock? Nibbles again. It's all nibbles in this building.",
+        "Slide it, mask it, slide it back, then the override. Or some of that in some order. I'm guessing.",
+        "By type, from where you are: {{opTypes}}. Which XOR is which is your problem.",
+        "Still {{opTypes}}. Read me the TARGET row in 1s and 0s if you want it spelled out."
+      ],
+      "stuckLines": [
+        "No way through from there in the moves you've got. Undo or reset, then ask.",
+        "That's a dead end. Reset it. The swipes won't mind."
+      ]
+    },
+    {
       "id": "key",
       "keywords": ["key", "keys", "mask", "override", "password", "code", "ns-02", "ns02", "log", "logs", "system", "????", "badge", "readout", "read out", "read-out", "policy", "trace"],
       "requiresLevel": 2,
@@ -73,6 +103,90 @@
         "It's NS-02.LOG. It says the key is 'read out per policy'. Nobody told me the policy. Ask again and I'll pretend I didn't hear.",
         "Fine. FINE. It says: {{key}}. Hex, four digits. Type it into the key box on BADGE.DB and never tell Head Office.",
         "I already told you: {{key}}. Hex. I'm writing it on my hand so one of us remembers."
+      ]
+    },
+    {
+      "id": "timekey",
+      "when": "revealed",
+      "file": "timeclk",
+      "keywords": ["key", "keys", "mask", "override", "password", "code", "????", "timeclk", "timeclk.dat", "timeclk.aud", "time clock", "aud", "audit trail", "swipe", "swipes"],
+      "requiresLevel": 2,
+      "lockedLines": [
+        "The time clock's audit file is in SYSTEM. I'm still PROBATION. PAYROLL.DAT, please, then I can look.",
+        "Can't. PROBATION. Fix PAYROLL.DAT and Head Office will let me read the boring files."
+      ],
+      "leaks": { "puzzle": "timeclk" },
+      "doneLine": "TIMECLK.DAT is open. Two badges, one keyboard. Let's not talk about it.",
+      "unlockedLine": "Override's in. Now it's just the order. Ask me about the sequence, or read me the TARGET row.",
+      "lines": [
+        "The time clock? It's got an override. Of course it has. Everything here has an override except my pay rate.",
+        "There's a TIMECLK.AUD in SYSTEM. OPERATOR eyes only. That's me now, apparently.",
+        "It says the override was run every night at 22:00 by #0117. Every night. Including tonight. I'm going to read it out before I lose my nerve.",
+        "Override key, read out per policy: {{key}}. Hex. Type it into the key box on TIMECLK.DAT. I need a lie down.",
+        "Still {{key}}. It hasn't changed. Nothing in this building changes."
+      ]
+    },
+    {
+      "id": "power",
+      "keywords": ["power", "drive", "driving", "geargrind", "geargr~1", "geargr~1.exe", "gear", "gears", "clutch", "generator", "genny", "brownout", "blackout", "flicker", "flickering", "dim", "mainframe", "battery", "juice", "stall", "stalled", "electricity"],
+      "lowLines": [
+        "Power's at {{power}}. I can't drive, I'm on a terminal. You've got the clutch. GEARGR~1.EXE. Go.",
+        "{{power}}! The lights are doing the thing. Please go and drive the generator.",
+        "Mainframe at {{power}}. If it hits zero we both go home, and I don't think either of us gets paid."
+      ],
+      "lines": [
+        "Mainframe's on {{power}}. Generator 2 tops it up, but only if somebody drives it. Somebody is you. I can't reach the pedals from here.",
+        "GEARGR~1.EXE. Clutch in, pick a gear, clutch out. Uphill wants a low gear, downhill wants a high one. Too low and it screams, too high and it bogs.",
+        "Keep the rev needle in the green band and it charges fastest. Space is the clutch. Left Shift down, Right Shift up. You can rebind them in the window.",
+        "Below 30% the line browns out and I can't touch your sectors. Below 15% Bit Rot won't run at all. At zero, lights out. Shift over.",
+        "Power's {{power}}. I'll nag. It's the one thing I'm good at."
+      ]
+    },
+    {
+      "id": "genset",
+      "when": "revealed",
+      "file": "genset",
+      "puzzle": "genset",
+      "keywords": ["genset", "genset.cfg", "governor", "cfg", "drain", "draining"],
+      "doneLine": "GENSET.CFG's sorted. The generator still sounds like a sad cow, but a thriftier one.",
+      "lines": [
+        "GENSET.CFG controls Generator 2. Governor's stuck at FULL, so it guzzles. Fix it and the mainframe drains slower.",
+        "No key on that one, just Bit Rot. Read me the TARGET row in 1s and 0s and I'll work out the order.",
+        "Someone reset that governor from NS-02. Which is this terminal. Which is weird."
+      ]
+    },
+    {
+      "id": "shiftlog",
+      "keywords": ["shiftlog", "shiftlog.bak", "shiftlog.txt", "shift log", "bak", "backup", "tape"],
+      "lines": [
+        "SHIFTLOG.BAK? It's in C_DRIVE. Backups don't open. Says so right there.",
+        "It says the original SHIFTLOG.TXT is missing. Maybe it isn't missing. Maybe it's just wearing the wrong name.",
+        "Select it and press F2. Give it its name back: SHIFTLOG.TXT. Then tell me what it says. Actually, don't."
+      ]
+    },
+    {
+      "id": "sealed",
+      "keywords": ["0117.sec", "sealed", "clearance", "level 3", "supervisor", "personnel", "file 0117"],
+      "requiresLevel": 3,
+      "lockedLines": [
+        "There's something SEALED in SYSTEM. SUPERVISOR only. I'm not a supervisor. I'm barely a person at this hour.",
+        "Sealed means sealed. Somebody would have to promote me again. TIMECLK.DAT maybe? Head Office loves a reconciled time clock."
+      ],
+      "lines": [
+        "0117.SEC. Personnel file. I'm a SUPERVISOR now, so I can read it. I'd rather not, but I have.",
+        "It says #0117 was terminated for 01:13 and 03:40. From terminal NS-02. And that the logs only name the terminal, not the person.",
+        "There's an audit at 06:00. Somebody's name goes in the report. I'd like it not to be mine. I'm new."
+      ]
+    },
+    {
+      "id": "blame",
+      "when": "revealed",
+      "file": "blame",
+      "keywords": ["blame", "blame.exe", "audit", "head office", "report", "installing", "responsible"],
+      "lines": [
+        "BLAME.EXE is at 97%. It's been at 97% for a while. Head Office software, so.",
+        "An audit at 06:00. Someone gets the blame for the 12th of October. I've only been here one night!",
+        "I'm not saying we should get our story straight. I'm saying it would be nice if we had a story."
       ]
     },
     {
@@ -95,7 +209,7 @@
     },
     {
       "id": "who",
-      "keywords": ["who", "0117", "#0117", "supervisor", "ghost", "terminated", "name"],
+      "keywords": ["who", "0117", "#0117", "ghost", "terminated", "name"],
       "lines": [
         "I'm #0118. First night. They said #0117 would supervise me. Have you seen them? You're sitting at their desk.",
         "#0117 was terminated last month according to payroll. But their badge swiped in at 22:00. So. That's fine. Totally fine.",
@@ -129,7 +243,7 @@
       "lines": [
         "Sorry, was on smoko.",
         "Hmm? I'll put that in a ticket.",
-        "Could you ask that as a question about keys, logs, payroll or #0117? I only did a six week course.",
+        "Could you ask that as a question about keys, logs, power or #0117? I only did a six week course.",
         "Noted. Filed. Lost. That's the ACME way.",
         "My connection's dodgy. If you've got a real AI intern, plug it in. I'm just the scripted one."
       ]
