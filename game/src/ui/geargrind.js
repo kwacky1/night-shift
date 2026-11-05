@@ -2,10 +2,12 @@
 // The simulation is pure (logic/gearbox.js). This file only does input, the canvas, audio, and
 // a DRIVE_REPORT to the store four times a second. The 60 Hz sim never touches the store.
 import { actions } from '../core/actions.js';
-import { powerLevel, powerStatus } from '../core/power.js';
-import { advance, chargeBand, createSim, DEFAULT_GEAR_KEYS, forceStall, gradeAt, heightProfile, sanitiseGearKeys } from '../logic/gearbox.js';
+import { powerConfig, powerLevel, powerStatus } from '../core/power.js';
+import { chargeStatus } from '../logic/gearStatus.js';
+import { advance, chargeBand, createSim, DEFAULT_GEAR_KEYS, forceStall, gradeAt, heightProfile, roadLength, sanitiseGearKeys } from '../logic/gearbox.js';
 
 const KEYS_KEY = 'night-shift:gear-keys';
+const HINT_KEY = 'night-shift:gg-hint-seen';
 const REPORT_MS = 250;
 const W = 500;
 const H = 200;
@@ -60,6 +62,7 @@ const createEngineAudio = () => {
 
 const controllers = new Map();
 
+
 export const geargrindView = {
   title: () => 'GEARGRIND.EXE - Generator 2',
   icon: () => 'gear',
@@ -67,8 +70,9 @@ export const geargrindView = {
   init(body, win, ctx) {
     const cfg = ctx.gearbox;
     body.innerHTML = `
-      <div class="geargrind">
+      <div class="geargrind" tabindex="0" data-clutch="out">
         <canvas width="${W}" height="${H}" aria-label="Generator road view"></canvas>
+        <div class="gg-status" role="status" data-charging="no"></div>
         <div class="gg-power"><span class="lbl">MAINFRAME</span><div class="meter"><div class="fill"></div></div><span class="pct"></span></div>
         <div class="gg-controls">
           <button type="button" data-ctl="down">&#9660; Down <kbd data-key="down"></kbd></button>
@@ -77,12 +81,30 @@ export const geargrindView = {
           <span class="spacer"></span>
           <button type="button" data-ctl="audio" aria-pressed="false">Sound: OFF</button>
           <button type="button" data-ctl="keys">Keys...</button>
+          <button type="button" data-ctl="help" title="How to drive">?</button>
         </div>
         <div class="gg-help">Throttle is stuck open. Hold the clutch and tap up/down to change gear. Stalled? Hold the clutch to restart.</div>
+        <div class="gg-hint" hidden>
+          <div class="card">
+            <b>GENERATOR 2: HOW TO CHARGE THE MAINFRAME</b>
+            <p>Keep the rev needle in the green <b>CHARGE ZONE</b> and the mainframe charges. Out of the zone, it doesn't.</p>
+            <ul>
+              <li>The throttle is stuck open. You only work the clutch and gears.</li>
+              <li>Hold <kbd data-key="clutch"></kbd> (clutch) and tap <kbd data-key="up"></kbd> to change up, <kbd data-key="down"></kbd> to change down.</li>
+              <li>Climb ahead? Change down before you bog. Downhill? Change up before the limiter.</li>
+              <li>Stalled? Hold the clutch to restart.</li>
+            </ul>
+            <p>The road keeps changing, so keep an eye on it while you work.</p>
+            <button type="button" data-ctl="hint-ok">Got it</button>
+          </div>
+        </div>
       </div>`;
+    const root = body.querySelector('.geargrind');
     const canvas = body.querySelector('canvas');
     const g = canvas.getContext('2d');
     const help = body.querySelector('.gg-help');
+    const hint = body.querySelector('.gg-hint');
+    const statusEl = body.querySelector('.gg-status');
     const c = {
       sim: createSim(cfg),
       carry: 0,
@@ -93,6 +115,7 @@ export const geargrindView = {
       acc: { charge: 0, distance: 0, stalls: 0 },
       lastReport: 0,
       lastSent: '',
+      lastStatus: 0,
       stallSeq: ctx.getState().power?.stallSeq ?? 0,
       flash: { text: '', until: 0 },
       rebinding: null,
@@ -100,6 +123,7 @@ export const geargrindView = {
       paused: true,
       raf: 0,
       last: performance.now(),
+      grab: null,
     };
     controllers.set(win.id, c);
 
@@ -107,17 +131,45 @@ export const geargrindView = {
       body.querySelectorAll('kbd[data-key]').forEach((k) => (k.textContent = keyName(c.keys[k.dataset.key])));
       help.textContent = c.rebinding
         ? `Press a key for ${c.rebinding[0].toUpperCase()}... (Esc cancels)`
-        : `Throttle is stuck open. Hold ${keyName(c.keys.clutch)} (clutch) and tap ${keyName(c.keys.up)} / ${keyName(c.keys.down)} to change gear. Stalled? Hold the clutch to restart.`;
+        : `Throttle is stuck open. Hold ${keyName(c.keys.clutch)} (clutch) and tap ${keyName(c.keys.up)} / ${keyName(c.keys.down)} to change gear. Keep the needle in the CHARGE ZONE. Stalled? Hold the clutch to restart.`;
     };
     showKeys();
     const flash = (text, ms = 1200) => (c.flash = { text, until: performance.now() + ms });
+
+    let seenHint = false;
+    try {
+      seenHint = localStorage.getItem(HINT_KEY) === '1';
+    } catch {}
+    const showHint = (show) => {
+      hint.hidden = !show;
+      if (!show) {
+        try {
+          localStorage.setItem(HINT_KEY, '1');
+        } catch {}
+      }
+    };
+    showHint(!seenHint);
+
+    // Keyboard goes wherever the player last clicked. Clicking anywhere on this window (title bar
+    // included, which doesn't move focus by itself) takes it off any text box in another window.
+    c.grab = () => {
+      const active = document.activeElement;
+      if (active && active !== root && !root.contains(active) && active.matches?.('input, textarea, [contenteditable="true"]')) active.blur();
+      if (!root.contains(document.activeElement)) root.focus({ preventScroll: true });
+    };
+    const frameEl = body.closest('.window') ?? body;
+    frameEl.addEventListener('pointerdown', (e) => {
+      if (e.button === 0) queueMicrotask(c.grab);
+    }, true);
 
     const focused = () => {
       const st = ctx.getState();
       return st.focusedWindowId === win.id && st.phase === 'desktop' && !st.alert;
     };
+    const isGearKey = (code) => code === c.keys.clutch || code === c.keys.up || code === c.keys.down;
     const onKeyDown = (e) => {
       if (c.rebinding) {
+        if (!focused()) return;
         e.preventDefault();
         e.stopPropagation();
         if (e.code === 'Escape') c.rebinding = null;
@@ -135,18 +187,26 @@ export const geargrindView = {
         showKeys();
         return;
       }
-      if (!focused() || e.target.closest?.('input, textarea')) return;
+      // While this window has focus its keys are ours, even if a text box elsewhere still has the caret.
+      if (!focused() || !isGearKey(e.code)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (document.activeElement?.matches?.('input, textarea') && !root.contains(document.activeElement)) c.grab();
+      if (!hint.hidden) {
+        showHint(false);
+        return;
+      }
       if (e.code === c.keys.clutch) c.clutchKey = true;
       else if (e.code === c.keys.up) !e.repeat && (c.pending.up = true);
       else if (e.code === c.keys.down) !e.repeat && (c.pending.down = true);
-      else return;
-      e.preventDefault();
-      e.stopPropagation();
     };
     const onKeyUp = (e) => {
-      if (e.code !== c.keys.clutch) return;
-      c.clutchKey = false;
-      if (focused()) e.preventDefault();
+      if (!isGearKey(e.code)) return;
+      if (e.code === c.keys.clutch) c.clutchKey = false;
+      if (focused()) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
     };
     const onBlur = () => {
       c.clutchKey = false;
@@ -175,7 +235,13 @@ export const geargrindView = {
       } else if (ctl === 'keys') {
         c.rebinding = Object.assign(['clutch', 'down', 'up'], { keys: { ...c.keys } });
         showKeys();
-      }
+      } else if (ctl === 'help') showHint(true);
+      // Keep the keyboard on the window, not the button (Space would click it again).
+      root.focus({ preventScroll: true });
+    });
+    hint.querySelector('[data-ctl="hint-ok"]').addEventListener('click', () => {
+      showHint(false);
+      root.focus({ preventScroll: true });
     });
 
     const report = (now, force = false) => {
@@ -207,10 +273,11 @@ export const geargrindView = {
       const dt = (now - c.last) / 1000;
       c.last = now;
       const st = ctx.getState();
-      c.paused = st.phase !== 'desktop' || !!st.alert || document.hidden || !!body.closest('.window')?.hidden;
+      c.paused = st.phase !== 'desktop' || !!st.alert || document.hidden || !!body.closest('.window')?.hidden || !hint.hidden;
+      const clutch = c.clutchKey || c.clutchMouse;
       if (!c.paused) {
         const before = c.sim;
-        const r = advance(before, { clutch: c.clutchKey || c.clutchMouse, ...c.pending }, dt, cfg, c.carry);
+        const r = advance(before, { clutch, ...c.pending }, dt, cfg, c.carry);
         if (r.applied) c.pending = { up: false, down: false };
         c.sim = r.sim;
         c.carry = r.carry;
@@ -226,6 +293,15 @@ export const geargrindView = {
         }
       } else c.pending = { up: false, down: false };
       if (now - c.lastReport >= REPORT_MS) report(now);
+      const clutchAttr = clutch ? 'in' : 'out';
+      if (root.dataset.clutch !== clutchAttr) root.dataset.clutch = clutchAttr;
+      clutchBtn.classList.toggle('pressed', clutch);
+      if (now - c.lastStatus >= 200) {
+        c.lastStatus = now;
+        const [kind, text] = chargeStatus(cfg, c.sim, c.paused, st);
+        if (statusEl.textContent !== text) statusEl.textContent = text;
+        if (statusEl.dataset.charging !== kind) statusEl.dataset.charging = kind;
+      }
       draw(g, cfg, c, now);
       c.audio?.update(c.sim.rpm, c.sim.running && !c.paused);
       c.raf = requestAnimationFrame(frame);
@@ -235,6 +311,8 @@ export const geargrindView = {
 
   render(body, state, prev, win) {
     const c = controllers.get(win.id);
+    // Focused from anywhere (taskbar, opening it, a click): take the keyboard.
+    if (c && state.focusedWindowId === win.id && prev?.focusedWindowId !== win.id) queueMicrotask(() => c.grab?.());
     const seq = state.power?.stallSeq ?? 0;
     if (c && seq !== c.stallSeq) {
       c.stallSeq = seq;
@@ -273,11 +351,32 @@ const draw = (g, cfg, c, now) => {
   g.closePath();
   g.fillStyle = '#062010';
   g.fill();
-  g.beginPath();
-  pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
-  g.strokeStyle = '#33ff66';
-  g.lineWidth = 2;
-  g.stroke();
+  // Road surface coloured by grade: amber climbs, cyan descents.
+  g.lineWidth = 3;
+  for (let i = 1; i < pts.length; i++) {
+    const gr = gradeAt(cfg.road, prof[i].x);
+    g.strokeStyle = gradeColour(gr);
+    g.beginPath();
+    g.moveTo(...pts[i - 1]);
+    g.lineTo(...pts[i]);
+    g.stroke();
+  }
+
+  // Signposts where the grade changes ahead.
+  const changes = gradeChanges(cfg.road, s.x + 4, s.x + AHEAD_M);
+  g.font = 'bold 11px "Courier New", monospace';
+  g.textBaseline = 'bottom';
+  for (const ch of changes) {
+    const px = (ch.x - (s.x - BEHIND_M)) * pxPerM;
+    const i = Math.max(0, Math.min(pts.length - 1, Math.round(px / (W / (pts.length - 1)))));
+    const py = pts[i][1];
+    g.fillStyle = '#808080';
+    g.fillRect(px, py - 22, 1, 22);
+    g.fillStyle = gradeColour(ch.grade);
+    const label = `${ch.grade > 0.005 ? '\u25B2' : ch.grade < -0.005 ? '\u25BC' : '\u25B6'}${Math.round(Math.abs(ch.grade) * 100)}%`;
+    g.fillText(label, px + 3, py - 12);
+  }
+  g.textBaseline = 'top';
 
   // The cart.
   const [cx, cy] = pts[carIdx];
@@ -307,30 +406,48 @@ const draw = (g, cfg, c, now) => {
   g.fillText(`${Math.round(s.v * 3.6)} km/h`, 44, 10);
   const pct = (gr) => `${gr > 0 ? '+' : ''}${Math.round(gr * 100)}%`;
   g.fillText(`grade ${pct(s.grade)}`, 44, 26);
-  const ahead = gradeAt(cfg.road, s.x + 120);
-  g.fillStyle = Math.abs(ahead - s.grade) > 0.04 ? '#ffb000' : '#1d6a35';
-  g.fillText(`ahead ${pct(ahead)}`, W - 110, 10);
+  const next = gradeChanges(cfg.road, s.x + 4, s.x + 400)[0];
+  if (next) {
+    const dist = Math.max(0, Math.round((next.x - s.x) / 10) * 10);
+    const steeper = next.grade - gradeAt(cfg.road, s.x);
+    const word = next.grade >= 0.06 ? 'CLIMB' : next.grade <= -0.04 ? 'DESCENT' : 'EASING';
+    const advice = steeper > 0.03 ? 'change down' : steeper < -0.03 ? 'change up' : '';
+    g.fillStyle = Math.abs(steeper) > 0.03 ? gradeColour(next.grade) : '#1d6a35';
+    g.fillText(`${word} ${pct(next.grade)} in ${dist} m`, W - 190, 10);
+    if (advice) g.fillText(`-> ${advice}`, W - 190, 26);
+  }
   const band = s.running && !s.clutch && s.gear ? chargeBand(cfg, s.rpm) : 0;
   g.fillStyle = band > 0.8 ? '#33ff66' : band > 0.3 ? '#ffb000' : '#6a3c00';
-  g.fillText(`charge ${'#'.repeat(Math.round(band * 5)).padEnd(5, '.')}`, W - 110, 26);
+  g.fillText(`charge ${'#'.repeat(Math.round(band * 5)).padEnd(5, '.')}`, 44, 42);
 
-  // Tachometer.
+  // Tachometer with the CHARGE ZONE marked.
   const tx = 10;
-  const ty = H - 22;
+  const ty = H - 18;
   const tw = W - 20;
   const max = cfg.blowRpm;
   const at = (rpm) => tx + (Math.min(rpm, max) / max) * tw;
+  const [zlo, zhi] = cfg.sweetBand;
+  const inZone = band >= 0.95;
   g.fillStyle = '#111';
-  g.fillRect(tx, ty, tw, 12);
-  g.fillStyle = '#0d3a1c';
-  g.fillRect(at(cfg.sweetBand[0]), ty, at(cfg.sweetBand[1]) - at(cfg.sweetBand[0]), 12);
+  g.fillRect(tx, ty, tw, 14);
+  g.fillStyle = inZone ? '#1f7a3a' : '#145c2c';
+  g.fillRect(at(zlo), ty, at(zhi) - at(zlo), 14);
   g.fillStyle = '#5a0000';
-  g.fillRect(at(cfg.redline), ty, tx + tw - at(cfg.redline), 12);
-  g.fillStyle = s.rpm >= cfg.redline ? '#ff3030' : s.lug > 0 ? '#ffb000' : '#33ff66';
-  g.fillRect(tx, ty + 3, at(s.rpm) - tx, 6);
+  g.fillRect(at(cfg.redline), ty, tx + tw - at(cfg.redline), 14);
+  g.fillStyle = s.rpm >= cfg.redline ? '#ff3030' : s.lug > 0 ? '#ffb000' : inZone ? '#a0ffb8' : '#33ff66';
+  g.fillRect(tx, ty + 4, Math.max(0, at(s.rpm) - tx), 6);
+  g.fillStyle = '#fff';
+  g.fillRect(at(s.rpm) - 1, ty - 2, 2, 18);
+  g.font = 'bold 10px "Courier New", monospace';
+  g.textBaseline = 'bottom';
+  g.fillStyle = inZone ? '#a0ffb8' : '#33ff66';
+  const zl = 'CHARGE ZONE';
+  g.fillText(zl, (at(zlo) + at(zhi) - g.measureText(zl).width) / 2, ty - 1);
+  g.fillStyle = '#a04040';
+  g.fillText('REDLINE', at(cfg.redline) + 2, ty - 1);
   g.fillStyle = '#808080';
-  g.font = '10px "Courier New", monospace';
-  g.fillText(`${Math.round(s.rpm)} rpm`, tx, ty - 12);
+  g.fillText(`${Math.round(s.rpm)} rpm`, tx, ty - 1);
+  g.textBaseline = 'top';
 
   // Status line.
   let status = '';
@@ -344,9 +461,27 @@ const draw = (g, cfg, c, now) => {
     g.font = 'bold 16px "Courier New", monospace';
     const w = g.measureText(status).width;
     g.fillStyle = 'rgba(0,0,0,0.7)';
-    g.fillRect((W - w) / 2 - 6, 52, w + 12, 22);
+    g.fillRect((W - w) / 2 - 6, 60, w + 12, 22);
     g.fillStyle = /STALL|GRIND|BOG|LIMIT|CLASH/.test(status) ? '#ffb000' : '#33ff66';
-    g.fillText(status, (W - w) / 2, 55);
+    g.fillText(status, (W - w) / 2, 63);
   }
 };
 
+
+const gradeColour = (gr) => (gr >= 0.1 ? '#ff7a30' : gr >= 0.05 ? '#ffb000' : gr <= -0.08 ? '#30c8ff' : gr <= -0.03 ? '#80e0ff' : '#33ff66');
+
+// Points ahead where the grade changes noticeably (segment starts), looping with the road.
+const gradeChanges = (road, from, to) => {
+  const total = roadLength(road);
+  const out = [];
+  const segs = road.segments;
+  for (let lap = Math.floor(from / total) * total; lap < to; lap += total) {
+    let pos = lap;
+    segs.forEach((seg, i) => {
+      const prev = segs[(i - 1 + segs.length) % segs.length].grade;
+      if (pos >= from && pos <= to && Math.abs(seg.grade - prev) > 0.03) out.push({ x: pos, grade: seg.grade });
+      pos += seg.length;
+    });
+  }
+  return out;
+};

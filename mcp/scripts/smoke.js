@@ -152,6 +152,27 @@ const run = async () => {
     dispatch(actions.openFile('geargrind'));
   });
   await page.waitForSelector('.geargrind canvas');
+  await page.waitForSelector('.gg-hint:not([hidden])');
+  expect(/CHARGE ZONE/.test(await page.textContent('.gg-hint')), 'first open shows the how-to-charge hint card');
+  await page.screenshot({ path: `${SHOTS}/smoke-geargrind-hint.png` });
+  await page.click('.gg-hint [data-ctl="hint-ok"]');
+
+  // Focus: type in the intern's chat, then click Gear Grind's title bar. Space is the clutch now.
+  await page.evaluate(() => window.NIGHT_SHIFT.dispatch(window.NIGHT_SHIFT.actions.openFile('intern')));
+  await page.click('.intern-app .compose input');
+  await page.fill('.intern-app .compose input', '');
+  await page.keyboard.type('hold on');
+  await page.click('.window:has(.geargrind) .titlebar .title');
+  await page.keyboard.down('Space');
+  await page.waitForTimeout(150);
+  const focusCheck = await page.evaluate(() => ({ clutch: document.querySelector('.geargrind').dataset.clutch, chat: document.querySelector('.intern-app .compose input').value }));
+  expect(focusCheck.clutch === 'in' && focusCheck.chat === 'hold on', 'clicking Gear Grind takes the keyboard: Space works the clutch, nothing typed into chat', JSON.stringify(focusCheck));
+  await page.keyboard.up('Space');
+  await page.click('.intern-app .compose input');
+  await page.click('.geargrind canvas');
+  await page.keyboard.press('Space');
+  expect((await page.inputValue('.intern-app .compose input')) === 'hold on', 'clicking the road view takes the keyboard too');
+
   const before = await page.evaluate(() => window.NIGHT_SHIFT.getState().stats.distance ?? 0);
   await page.keyboard.down('Space');
   await page.waitForTimeout(1200);
@@ -166,9 +187,23 @@ const run = async () => {
   await page.waitForTimeout(2500);
   const drove = await page.evaluate(() => ({ distance: window.NIGHT_SHIFT.getState().stats.distance ?? 0, gen: window.NIGHT_SHIFT.getState().power.generator }));
   expect(drove.distance > before, 'driving GEARGRIND.EXE moves the generator along', JSON.stringify(drove));
+  const ggStatus = await page.textContent('.gg-status');
+  expect(/CHARGING|NOT CHARGING/.test(ggStatus) && /drain/.test(ggStatus), 'Gear Grind shows a live charging status', ggStatus);
   const pwr = await tool('whoami');
   expect(/"generator": "RUNNING/.test(pwr), 'the intern sees the generator running', pwr);
   await page.screenshot({ path: `${SHOTS}/smoke-geargrind.png` });
+  await page.evaluate(() => {
+    const { dispatch, actions, getState } = window.NIGHT_SHIFT;
+    const s = getState();
+    dispatch(actions.hydrate({ ...s, power: { ...s.power, level: 25 } }));
+  });
+  await page.waitForSelector('.tray .power[data-status="brownout"]');
+  expect(/BROWNOUT/.test(await page.textContent('.tray .power')), 'the tray power meter signposts a brownout');
+  await page.evaluate(() => {
+    const { dispatch, actions, getState } = window.NIGHT_SHIFT;
+    const s = getState();
+    dispatch(actions.hydrate({ ...s, power: { ...s.power, level: 60 } }));
+  });
 
   // No agent: the scripted intern, replaying Simon's playtest in a fresh browser profile.
   const solo = await (await browser.newContext({ viewport: { width: 1024, height: 768 } })).newPage();

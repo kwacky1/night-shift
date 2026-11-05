@@ -79,9 +79,18 @@ export const renderTaskbar = (bar, state, prev) => {
   intern.classList.toggle('unread', unread > 0);
   const power = bar.querySelector('.power');
   const status = powerStatus(state);
-  const powerText = `PWR ${Math.ceil(powerLevel(state))}%${state.power?.generator?.stalled ? ' STALL' : ''}`;
+  const word = { flicker: ' LOW', brownout: ' BROWNOUT', critical: ' CRITICAL' }[status] ?? '';
+  const powerText = `PWR ${Math.ceil(powerLevel(state))}%${word}${state.power?.generator?.stalled ? ' STALL' : ''}`;
   if (power.textContent !== powerText) power.textContent = powerText;
-  power.dataset.status = status;
+  if (power.dataset.status !== status) {
+    power.dataset.status = status;
+    power.title = {
+      ok: 'Mainframe power. Open GEARGRIND.EXE to charge it.',
+      flicker: 'Mainframe power is low. Drive GEARGRIND.EXE before the brownout.',
+      brownout: 'BROWNOUT: the intern line is down. Drive GEARGRIND.EXE now.',
+      critical: 'CRITICAL: Bit Rot is offline. Drive GEARGRIND.EXE or the mainframe goes dark.',
+    }[status] ?? power.title;
+  }
   if (prev && prev.windows === state.windows && prev.focusedWindowId === state.focusedWindowId && prev.files === state.files) return;
   bar.querySelector('.tasks').innerHTML = [...state.windows]
     .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))

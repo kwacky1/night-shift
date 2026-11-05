@@ -478,7 +478,8 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
 #alert .buttons { display: flex; justify-content: center; padding-bottom: 8px; }
 
 /* GEARGRIND.EXE */
-.geargrind { display: flex; flex-direction: column; gap: 6px; height: 100%; padding: 6px; box-sizing: border-box; }
+.geargrind { position: relative; display: flex; flex-direction: column; gap: 6px; height: 100%; padding: 6px; box-sizing: border-box; outline: none; }
+.window.focused .geargrind:focus-within canvas { box-shadow: inset -1px -1px var(--hi), inset 1px 1px var(--lo), 0 0 0 2px var(--phosphor); }
 .geargrind canvas { width: 100%; aspect-ratio: 5 / 2; background: #000; image-rendering: pixelated; box-shadow: inset -1px -1px var(--hi), inset 1px 1px var(--lo); }
 .gg-power { display: flex; align-items: center; gap: 8px; font: 12px var(--mono); }
 .gg-power .meter { flex: 1; height: 14px; background: #000; box-shadow: inset -1px -1px var(--hi), inset 1px 1px var(--lo); padding: 2px; box-sizing: border-box; }
@@ -490,6 +491,18 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
 .gg-controls .spacer { flex: 1; }
 .gg-controls kbd { font: 10px var(--mono); color: var(--lo); margin-left: 4px; }
 .gg-help { font-size: 11px; color: #333; }
+.gg-status { font: bold 11px var(--mono); padding: 2px 4px; background: #000; color: #ff6040; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gg-status[data-charging='yes'] { color: var(--phosphor); }
+.gg-status[data-charging='slow'] { color: var(--amber); }
+.gg-controls button.pressed { box-shadow: inset 1px 1px var(--lo), inset -1px -1px var(--hi); }
+.gg-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); z-index: 2; }
+.gg-hint[hidden] { display: none; }
+.gg-hint .card { max-width: 440px; background: var(--face, #c0c0c0); color: #000; padding: 10px 12px; font-size: 12px; box-shadow: inset -1px -1px #000, inset 1px 1px #fff, 3px 3px 0 rgba(0, 0, 0, 0.4); }
+.gg-hint .card p, .gg-hint .card ul { margin: 6px 0; }
+.gg-hint .card ul { padding-left: 18px; }
+.gg-hint .card kbd { font: bold 11px var(--mono); padding: 0 3px; border: 1px solid #666; background: #eee; }
+.gg-power .meter { position: relative; }
+.gg-power .meter::after { content: ''; position: absolute; top: 0; bottom: 0; left: var(--brownout, 30%); border-left: 1px dashed #d02020; }
 
 /* Low mainframe power: dim and flicker the desktop. */
 body[data-power='flicker'] #desktop { animation: brownflicker 7s infinite; }
