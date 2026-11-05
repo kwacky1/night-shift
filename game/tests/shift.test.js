@@ -120,3 +120,12 @@ test('migrateSave: a current save past 06:00 or at zero power is closed out', ()
   assert.equal(reloaded.phase, 'over');
   assert.deepEqual(reloaded.shiftEnd, over.shiftEnd);
 });
+
+test('a long tick that runs the mainframe dry stops the clock at the blackout', () => {
+  const s = reducer(desktop(), actions.tick(480));
+  assert.equal(s.phase, 'over');
+  assert.equal(s.shiftEnd.reason, 'blackout');
+  assert.equal(s.clock.elapsed, Math.ceil(80 / data.night.power.drainPerMinute));
+  assert.equal(s.shiftEnd.at, '23:55');
+  assert.equal(s.power.level, 0);
+});
