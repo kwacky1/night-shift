@@ -62,6 +62,6 @@ export const createInitialState = ({ files = [], puzzles = [] } = {}) => {
     flags: {},
     log: [],
     // Intern #0118: permission level and the INTERN.EXE chat. pester counts drive the scripted fallback.
-    intern: { level: START_LEVEL, messages: [], nextMsgId: 1, playerReadId: 0, pester: {} },
+    intern: { level: START_LEVEL, messages: [], nextMsgId: 1, playerReadId: 0, pester: {}, lastTopic: null, heardTargets: [] },
   };
 };

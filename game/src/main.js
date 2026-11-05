@@ -146,7 +146,8 @@ const boot = async () => {
       ui.internTyping = false;
       if (ui.internStatus === 'online') return ctx.rerender();
       const reply = fallbackReply(store.getState(), text, internScript);
-      store.dispatch(actions.chatSend(reply.text, 'intern', { scripted: true, topic: reply.topic }));
+      const { text: line, ...extra } = reply;
+      store.dispatch(actions.chatSend(line, 'intern', { ...extra, scripted: true }));
     }, 700 + Math.random() * 900);
   };
 
