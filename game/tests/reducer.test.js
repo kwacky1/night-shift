@@ -52,8 +52,9 @@ test('clock ticks from 22:00, wraps midnight, stops at 06:00', () => {
   assert.equal(clockLabel(s), '00:05');
   s = reducer(s, actions.tick(1000));
   assert.equal(clockLabel(s), '06:00');
-  assert.equal(s.flags.shiftOver, true);
-  assert.ok(s.alert);
+  assert.equal(s.phase, 'over', 'the shift ends on an end-of-shift screen, not an alert');
+  assert.equal(s.shiftEnd.reason, 'clock');
+  assert.equal(s.alert, null);
   assert.equal(reducer(s, actions.tick()), s);
   assert.equal(reducer(fresh(), actions.tick()).clock.elapsed, 0, 'no ticking during boot');
 });

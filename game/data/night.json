@@ -1,0 +1,10 @@
+{
+  "msPerMinute": 2000,
+  "power": {
+    "start": 80,
+    "drainPerMinute": 0.7,
+    "chargeCapPerReport": 2,
+    "thresholds": { "flicker": 50, "brownout": 30, "critical": 15 },
+    "nagBelow": 40
+  }
+}

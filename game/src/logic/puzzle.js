@@ -1,6 +1,7 @@
 // Bit Rot puzzle engine. Puzzles are plain data:
 // { id, title, start, target, moveLimit, ops: [{ type: 'shl'|'shr', n } | { type: 'xor', mask }] }
 import { shl, shr, xor, toWord, toHex } from './bits.js';
+import { MAX_LEVEL } from '../core/permissions.js';
 
 export const OP_TYPES = ['shl', 'shr', 'xor'];
 // Things a puzzle can hide from the player's screen (the intern still sees them as numbers).
@@ -69,7 +70,9 @@ export const validatePuzzle = (puzzle) => {
     errors.push(`playerHides may only contain ${PLAYER_HIDES.join(', ')}`);
   if (puzzle.onSolve !== undefined) {
     const lvl = puzzle.onSolve?.internLevel;
-    if (lvl !== undefined && !(Number.isInteger(lvl) && lvl >= 0 && lvl <= 2)) errors.push('onSolve.internLevel must be 0-2');
+    if (lvl !== undefined && !(Number.isInteger(lvl) && lvl >= 0 && lvl <= MAX_LEVEL)) errors.push(`onSolve.internLevel must be 0-${MAX_LEVEL}`);
+    const ds = puzzle.onSolve?.drainScale;
+    if (ds !== undefined && !(typeof ds === 'number' && ds > 0 && ds <= 1)) errors.push('onSolve.drainScale must be above 0 and at most 1');
   }
   for (const key of ['start', 'target']) {
     const v = parseNumber(puzzle[key]);

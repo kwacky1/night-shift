@@ -107,6 +107,30 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
 .timecard .punch { font-size: 40px; text-align: center; color: #a00; letter-spacing: 4px; margin-bottom: 14px; }
 .timecard button { width: 100%; font: bold 15px var(--mono); padding: 10px; }
 
+/* ---------- End of shift ---------- */
+#shiftend {
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 50% 40%, #201808, #000 70%);
+}
+.shiftend-card {
+  width: 460px;
+  background: #f1e7c8;
+  color: #3a2a10;
+  padding: 18px 22px 22px;
+  font: 14px var(--mono);
+  box-shadow: 0 0 0 2px #8a7650, 6px 8px 0 #000;
+  transform: rotate(1deg);
+}
+.shiftend-card h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: 4px; color: #a00; border-bottom: 2px solid #8a7650; padding-bottom: 6px; }
+.shiftend-card.blackout { background: #d9d2bc; filter: saturate(0.6); }
+.shiftend-card .why { margin: 8px 0 12px; }
+.shiftend-card dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 14px; }
+.shiftend-card dt { color: #8a7650; }
+.shiftend-card dd { margin: 0; }
+.shiftend-card .teaser { color: #a00; font-size: 12px; letter-spacing: 1px; border-top: 1px dashed #8a7650; padding-top: 8px; }
+.shiftend-card button { width: 100%; font: bold 15px var(--mono); padding: 10px; }
+
 /* ---------- Desktop ---------- */
 #desktop {
   position: absolute;
