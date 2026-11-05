@@ -176,6 +176,20 @@ export const advance = (sim, input, elapsed, cfg, carry = 0) => {
   return { sim: s, events, carry: t, applied: !first };
 };
 
+// Key bindings (KeyboardEvent.code values). Rebindable in the window and saved in localStorage.
+export const DEFAULT_GEAR_KEYS = Object.freeze({ clutch: 'Space', down: 'ShiftLeft', up: 'ShiftRight' });
+
+// Returns a full, valid binding from whatever was saved: unknown or clashing entries fall back.
+export const sanitiseGearKeys = (saved) => {
+  const keys = { ...DEFAULT_GEAR_KEYS };
+  if (!saved || typeof saved !== 'object') return keys;
+  for (const k of Object.keys(DEFAULT_GEAR_KEYS)) {
+    const code = saved[k];
+    if (typeof code === 'string' && /^[A-Za-z0-9]{1,20}$/.test(code)) keys[k] = code;
+  }
+  return new Set(Object.values(keys)).size === 3 ? keys : { ...DEFAULT_GEAR_KEYS };
+};
+
 // Checks data/gearbox.json. Returns a list of problems (empty when fine).
 export const validateGearbox = (cfg) => {
   const errors = [];

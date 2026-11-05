@@ -58,6 +58,13 @@
     "content": ["MZ  INTERN.EXE v0.1 - ACME Graduate Program", "Chat client for supervised interns. Do not feed after midnight."]
   },
   {
+    "id": "geargrind",
+    "name": "GEARGR~1.EXE",
+    "type": "app",
+    "app": "geargrind",
+    "content": ["MZ  GEARGRIND.EXE - Generator 2 manual start", "Throttle stuck open since 1994. Mind the clutch."]
+  },
+  {
     "id": "badge",
     "name": "BADGE.DB",
     "type": "data",

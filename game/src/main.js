@@ -16,6 +16,8 @@ import { bitrotView, bitrotKey } from './ui/bitrot.js';
 import { internView, DEFAULT_INTERN_URL } from './ui/intern.js';
 import { startRename } from './ui/rename.js';
 import { renderShiftEnd } from './ui/shiftend.js';
+import { geargrindView } from './ui/geargrind.js';
+import { powerStatus } from './core/power.js';
 import { connectIntern, exposeApi, isLocalSocketUrl } from './bridge/api.js';
 import { fallbackReply } from './intern/fallback.js';
 import { unreadForPlayer } from './core/selectors.js';
@@ -41,12 +43,13 @@ const loadSave = (data) => {
 };
 
 const boot = async () => {
-  const [files, puzzles, night, story, internScript] = await Promise.all([
+  const [files, puzzles, night, story, internScript, gearbox] = await Promise.all([
     loadJson('../data/files.json'),
     loadJson('../data/puzzles.json'),
     loadJson('../data/night.json'),
     loadJson('../data/story.json'),
     loadJson('../data/intern.json'),
+    loadJson('../data/gearbox.json'),
   ]);
   const data = { files, puzzles, night, story };
   const store = createStore(reducer, loadSave(data) ?? createInitialState(data));
@@ -76,6 +79,20 @@ const boot = async () => {
     renderWindows(dom.windows, state, prev, ctx);
     renderTaskbar(dom.taskbar, state, prev);
     renderAlert(dom.alert, state, prev, ctx);
+    renderPower(state, prev);
+  };
+
+  // Low power is felt: the desktop dims and flickers (styles keyed on body[data-power]), and a
+  // story surge flashes the screen.
+  let surgeTimer = null;
+  const renderPower = (state, prev) => {
+    const status = state.phase === 'desktop' ? powerStatus(state) : 'ok';
+    if (document.body.dataset.power !== status) document.body.dataset.power = status;
+    if (prev && state.power && prev.power && state.power.surgeSeq !== prev.power.surgeSeq) {
+      document.body.classList.add('surge');
+      clearTimeout(surgeTimer);
+      surgeTimer = setTimeout(() => document.body.classList.remove('surge'), 900);
+    }
   };
 
   let bridge = null;
@@ -95,6 +112,7 @@ const boot = async () => {
   const ctx = {
     dispatch: store.dispatch,
     getState: store.getState,
+    gearbox,
     rerender: () => render(store.getState(), null),
     reset: () => {
       localStorage.removeItem(SAVE_KEY);
@@ -125,6 +143,7 @@ const boot = async () => {
   registerView('viewer', viewerView);
   registerView('bitrot', bitrotView);
   registerView('intern', internView);
+  registerView('geargrind', geargrindView);
   initDesktop(dom.icons, dom.marquee, ctx);
   initWindows(dom.windows, ctx);
   initTaskbar(dom.taskbar, dom.startMenu, ctx);

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { advance, chargeBand, createSim, forceStall, gradeAt, lookup, roadLength, step, STEP_DT, validateGearbox, wheelRpm } from '../src/logic/gearbox.js';
+import { advance, chargeBand, DEFAULT_GEAR_KEYS, sanitiseGearKeys, createSim, forceStall, gradeAt, lookup, roadLength, step, STEP_DT, validateGearbox, wheelRpm } from '../src/logic/gearbox.js';
 
 const cfg = JSON.parse(readFileSync(new URL('../data/gearbox.json', import.meta.url)));
 const flat = (grade = 0) => ({ ...cfg, road: { ramp: 0, segments: [{ length: 10000, grade }] } });
@@ -151,4 +151,11 @@ test('advance runs whole fixed steps and carries the remainder', () => {
   assert.ok(a.carry >= 0 && a.carry < STEP_DT);
   const b = advance(a.sim, { clutch: true, up: true }, 0.001, cfg, 0);
   assert.equal(b.applied, false, 'too short for a step, input not consumed');
+});
+
+test('gear key bindings: defaults, saved values, and clashes fall back', () => {
+  assert.deepEqual(sanitiseGearKeys(null), DEFAULT_GEAR_KEYS);
+  assert.deepEqual(sanitiseGearKeys({ clutch: 'KeyC', up: 'KeyW' }), { clutch: 'KeyC', up: 'KeyW', down: 'ShiftLeft' });
+  assert.deepEqual(sanitiseGearKeys({ clutch: 'KeyC', up: 'KeyC', down: 'KeyX' }), DEFAULT_GEAR_KEYS, 'two actions on one key');
+  assert.deepEqual(sanitiseGearKeys({ clutch: '<script>' }), DEFAULT_GEAR_KEYS);
 });

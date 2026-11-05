@@ -476,3 +476,37 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
   box-shadow: 1px 1px 0 #000;
 }
 #alert .buttons { display: flex; justify-content: center; padding-bottom: 8px; }
+
+/* GEARGRIND.EXE */
+.geargrind { display: flex; flex-direction: column; gap: 6px; height: 100%; padding: 6px; box-sizing: border-box; }
+.geargrind canvas { width: 100%; aspect-ratio: 5 / 2; background: #000; image-rendering: pixelated; box-shadow: inset -1px -1px var(--hi), inset 1px 1px var(--lo); }
+.gg-power { display: flex; align-items: center; gap: 8px; font: 12px var(--mono); }
+.gg-power .meter { flex: 1; height: 14px; background: #000; box-shadow: inset -1px -1px var(--hi), inset 1px 1px var(--lo); padding: 2px; box-sizing: border-box; }
+.gg-power .fill { height: 100%; background: var(--phosphor); transition: width 0.25s linear; }
+.gg-power[data-status='flicker'] .fill { background: var(--amber); }
+.gg-power[data-status='brownout'] .fill, .gg-power[data-status='critical'] .fill { background: #d02020; }
+.gg-power .pct { min-width: 40px; text-align: right; }
+.gg-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.gg-controls .spacer { flex: 1; }
+.gg-controls kbd { font: 10px var(--mono); color: var(--lo); margin-left: 4px; }
+.gg-help { font-size: 11px; color: #333; }
+
+/* Low mainframe power: dim and flicker the desktop. */
+body[data-power='flicker'] #desktop { animation: brownflicker 7s infinite; }
+body[data-power='brownout'] #desktop { filter: brightness(0.82) sepia(0.2); animation: brownflicker 3.5s infinite; }
+body[data-power='critical'] #desktop { filter: brightness(0.62) sepia(0.4); animation: brownflicker 1.6s infinite; }
+body.surge #desktop { animation: surge 0.9s steps(6); }
+@keyframes brownflicker {
+  0%, 91%, 95%, 100% { opacity: 1; }
+  92% { opacity: 0.7; }
+  94% { opacity: 0.88; }
+}
+@keyframes surge {
+  0% { filter: brightness(2.2) contrast(1.4); }
+  30% { filter: brightness(0.2); }
+  60% { filter: brightness(1.6); }
+  100% { filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body[data-power] #desktop, body.surge #desktop { animation: none; }
+}
