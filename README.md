@@ -63,7 +63,7 @@ Mainframe power (the `PWR` meter in the tray, amber when LOW, orange at BROWNOUT
 - The throttle is stuck open, so all you do is work the clutch and pick gears. There is no steering.
 - The road has hills. Each gear has its own torque curve: too high a gear for the slope and the engine bogs and stalls; too low and it screams into the limiter and stalls. Grinding (shifting without the clutch) does nothing useful.
 - Keep the rev needle in the green **CHARGE ZONE** on the tacho. Outside it, charging drops away fast. The line under the road says what's happening right now (`CHARGING +1.6%/min | drain -0.9%/min`, or `NOT CHARGING: wrong gear - revs too low, change down`).
-- The road is coloured by grade (amber climbs, blue descents) with signposts where it changes, and the HUD warns you ("CLIMB +15% in 120 m -> change down"). Expect to change gear every 10 to 20 seconds; no single gear works for long.
+- The road is coloured by grade (amber climbs, blue descents) with signposts where it changes, and the HUD warns you ("CLIMB +15% in 120 m -> change down soon"). Expect to change gear every 10 to 20 seconds; no single gear works for long.
 - If it stalls, hold the clutch to crank it back to life.
 - Stopped on a hill? Hold the clutch, drop to 1st and let go. 1st slips the clutch so it always pulls away, even on the steepest climb; letting it in from high revs dumps the clutch for a short extra shove.
 - The status line always comes first and gives one bit of advice that fits your gear (it never says "change down" in 1st). The HUD look-ahead only adds advice when you're already charging and moving.
@@ -278,7 +278,7 @@ Add a beat to `game/data/story.json`:
 
 `game/data/gearbox.json` holds the idle, lug, redline and blow-up revs, each gear's ratio (km/h per 1000 rpm) and torque table, the road profile, the CHARGE ZONE (`sweetBand`), the 1st-gear `launchRpm` (where the clutch slips when pulling away) and the `dumpTorque`/`dumpSeconds` clutch-dump shove, the `chargeCurve` (rpm to 0..1) and the charge rate. `game/data/night.json` holds the drain, the `drainCurve` (minutes into the shift to a drain multiplier) and the `chargeTaper` (power level to a charge multiplier). The sim is pure (`step(sim, input, dt)`) and runs at a fixed 60 Hz step.
 
-`node scripts/balance.js` plays a whole night with scripted drivers (nobody, each gear held all night, and a driver that shifts on the revs) and prints how the power fares. `game/tests/balance.test.js` holds the line: no single gear can keep the mainframe above 70%, and the rev-shifter keeps the lights on all night. `game/tests/gearbox.test.js` checks that 1st pulls away from a standstill on the steepest grade on the road plus 3% and that a stall on that climb can be recovered.
+`node scripts/balance.js` plays a whole night with scripted drivers (nobody, each gear held all night, and a driver that shifts on the revs) and prints how the power fares. `game/tests/balance.test.js` holds the line: no single gear can keep the mainframe above 70%, and the rev-shifter keeps the lights on all night. HUD and status text is drawn into a fixed 500x200 canvas (scaled to the window), measured with `measureText` and word-wrapped; `game/tests/gearstatus.test.js` also holds every status, look-ahead and flash string to a character budget (`HUD_CHARS`, `STATUS_CHARS`, `OVERLAY_CHARS` in `logic/gearStatus.js`). `game/tests/gearbox.test.js` checks that 1st pulls away from a standstill on the steepest grade on the road plus 3% and that a stall on that climb can be recovered.
 
 ### The MCP seam
 
