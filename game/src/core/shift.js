@@ -1,0 +1,41 @@
+// End of shift: 06:00 or a blackout. Pure helpers used by the reducer and the save migration.
+import { clockMinutes, formatClock } from './selectors.js';
+
+export const END_REASONS = ['clock', 'blackout'];
+
+// How the intern was used this shift: a real agent, the scripted fallback, or not at all.
+export const internUsage = (stats) => {
+  const aiActions = (stats.internOps ?? 0) + (stats.internKeys ?? 0) + (stats.internMessages ?? 0);
+  if (aiActions > 0) return { mode: 'ai', count: aiActions };
+  if ((stats.scriptedReplies ?? 0) > 0) return { mode: 'scripted', count: stats.scriptedReplies };
+  return { mode: 'none', count: 0 };
+};
+
+export const shiftSummary = (state) => {
+  const puzzles = Object.values(state.puzzles);
+  const stats = state.stats ?? {};
+  return {
+    puzzlesSolved: puzzles.filter((p) => p.solved).length,
+    puzzlesTotal: puzzles.length,
+    power: Math.round(state.power?.level ?? 0),
+    lowestPower: Math.round(state.power?.lowest ?? 0),
+    distanceKm: Math.round((stats.distance ?? 0) / 100) / 10,
+    stalls: stats.stalls ?? 0,
+    internLevel: state.intern?.level ?? 0,
+    intern: internUsage(stats),
+  };
+};
+
+export const endShift = (state, reason) => {
+  if (state.phase === 'over') return state;
+  const at = formatClock(clockMinutes(state));
+  const text = reason === 'blackout' ? 'BLACKOUT. Mainframe down. Shift over.' : '06:00. Shift over.';
+  const next = {
+    ...state,
+    phase: 'over',
+    alert: null,
+    log: [...state.log, { at, text }].slice(-100),
+    power: { ...state.power, generator: { ...state.power.generator, running: false, rpm: 0 } },
+  };
+  return { ...next, shiftEnd: { reason, at, summary: shiftSummary(next) } };
+};

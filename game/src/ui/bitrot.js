@@ -3,6 +3,7 @@ import { actions } from '../core/actions.js';
 import { toBits, toHex } from '../logic/bits.js';
 import { opLabel } from '../logic/puzzle.js';
 import { isOpUnlocked } from '../core/permissions.js';
+import { isBitrotPowered } from '../core/power.js';
 import { esc } from './dom.js';
 
 const puzzleFor = (state, win) => state.puzzles[state.files[win.fileId]?.puzzleId];
@@ -47,7 +48,8 @@ export const bitrotView = {
   },
 
   render(body, state, prev, win) {
-    if (prev && prev.puzzles === state.puzzles && prev.files === state.files) return;
+    const powered = isBitrotPowered(state);
+    if (prev && prev.puzzles === state.puzzles && prev.files === state.files && isBitrotPowered(prev) === powered) return;
     const p = puzzleFor(state, win);
     const root = body.querySelector('.bitrot');
     if (!p) {
@@ -55,7 +57,7 @@ export const bitrotView = {
       return;
     }
     const used = p.history.length;
-    const locked = p.solved || p.failed;
+    const locked = p.solved || p.failed || !powered;
     const hideHex = (p.playerHides ?? []).includes('hex');
     const hex = (v) => (hideHex ? '????' : toHex(v));
     const trail = hideHex ? 'TRACE SUPPRESSED - ASK #0118 FOR A READOUT' : [...p.history, p.value].map(toHex).join(' &rarr; ');
@@ -67,6 +69,7 @@ export const bitrotView = {
       ${p.hint ? `<div class="hint">${esc(p.hint)}</div>` : ''}
       <div class="bitrow"><span class="lbl">CURRENT</span><div class="bits">${bitsHtml(p.value, p.target, false)}</div><span class="hex">${hex(p.value)}</span></div>
       <div class="bitrow"><span class="lbl">TARGET</span><div class="bits target">${bitsHtml(p.target, p.target, true)}</div><span class="hex">${hex(p.target)}</span></div>
+      <div class="legend" aria-label="Cell colours"><span><i class="on"></i>lit, correct</span><span><i class="on wrong"></i>lit, should be off</span><span><i class="off-wrong"></i>should be lit</span></div>
       <div class="moves"><span>MOVES ${used}/${p.moveLimit}</span><span class="pips">${Array.from({ length: p.moveLimit }, (_, i) => `<span class="${i < used ? 'used' : ''}"></span>`).join('')}</span></div>
       <div class="ops">${p.ops
         .map((op, i) => {
@@ -77,18 +80,19 @@ export const bitrotView = {
         .join('')}</div>
       ${
         keyedLocked.length && !p.solved
-          ? `<form class="keyrow" data-op="${keyedLocked[0]}"><label>OVERRIDE KEY</label><input name="key" maxlength="32" placeholder="0x...." autocomplete="off" spellcheck="false" value="${esc(typedKey)}" /><button type="submit">Enter</button></form>`
+          ? `<form class="keyrow" data-op="${keyedLocked[0]}"><label>OVERRIDE KEY</label><input name="key" maxlength="32" placeholder="0x...." autocomplete="off" spellcheck="false" value="${esc(typedKey)}" /><button type="submit" ${powered ? '' : 'disabled'}>Enter</button></form>`
           : ''
       }
       <div class="trail">${trail}</div>`;
     root.insertAdjacentHTML(
       'beforeend',
       `${p.solved ? '<div class="banner ok">SECTOR RECOVERED</div>' : ''}
+      ${!powered && !p.solved ? '<div class="banner lost">INSUFFICIENT POWER - DRIVE GEARGRIND.EXE</div>' : ''}
       ${p.failed ? '<div class="banner lost">SECTOR LOST - UNDO OR RESET</div>' : ''}
       <div class="actions">
         ${p.solved
           ? `<button type="button" data-cmd="open">Open ${esc(state.files[win.fileId].name)}</button>`
-          : `<button type="button" data-cmd="undo" ${used ? '' : 'disabled'}>Undo <kbd>Z</kbd></button><button type="button" data-cmd="reset" ${used ? '' : 'disabled'}>Reset <kbd>R</kbd></button>`}
+          : `<button type="button" data-cmd="undo" ${used && powered ? '' : 'disabled'}>Undo <kbd>Z</kbd></button><button type="button" data-cmd="reset" ${used && powered ? '' : 'disabled'}>Reset <kbd>R</kbd></button>`}
       </div>`,
     );
   },

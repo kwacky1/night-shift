@@ -140,6 +140,24 @@ const ART = {
     '................',
     '................',
   ],
+  gear: [
+    '......kkkk......',
+    '......kggk......',
+    '..kk.kggggk.kk..',
+    '..kgkkggggkkgk..',
+    '...kggggggggk...',
+    '.kkgggkkkkgggkk.',
+    'kggggk....kggggk',
+    'kgggk..rr..kgggk',
+    'kgggk..rr..kgggk',
+    'kggggk....kggggk',
+    '.kkgggkkkkgggkk.',
+    '...kggggggggk...',
+    '..kgkkggggkkgk..',
+    '..kk.kggggk.kk..',
+    '......kggk......',
+    '......kkkk......',
+  ],
 };
 
 const cache = new Map();
@@ -164,6 +182,7 @@ export const iconFor = (file) => {
   if (file.id === 'recycled') return 'bin';
   if (file.type === 'folder') return 'folder';
   if (file.locked && file.puzzleId) return 'corrupt';
+  if (file.app === 'geargrind') return 'gear';
   if (file.locked) return 'backup';
   if (/\.(BAT|SYS|EXE|COM)$/.test(file.name)) return 'system';
   return 'text';

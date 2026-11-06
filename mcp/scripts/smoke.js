@@ -60,7 +60,8 @@ const run = async () => {
   if (!executablePath) throw new Error('No Chrome/Edge found. Set CHROME_PATH.');
   const browser = await chromium.launch({ executablePath, headless: true });
   cleanup.push(() => browser.close());
-  const page = await browser.newPage({ viewport: { width: 1024, height: 768 } });
+  const profile = await browser.newContext({ viewport: { width: 1024, height: 768 } });
+  const page = await profile.newPage();
   page.on('pageerror', (err) => console.error('    page error:', err.message));
   await page.goto(`http://localhost:${HTTP_PORT}/?intern=ws://localhost:${WS_PORT}`);
   await page.waitForFunction(() => window.NIGHT_SHIFT);
@@ -124,6 +125,86 @@ const run = async () => {
   expect(/OPERATOR/.test(await tool('whoami')), 'after reload the game reconnects with saved state');
   await page.screenshot({ path: `${SHOTS}/smoke-reload.png` });
 
+  // A second window of the same game (same profile, no ?intern=) quietly re-dials the saved line
+  // and takes it over. The first window says LINE TAKEN instead of pretending to be SCRIPTED.
+  const rival = await profile.newPage();
+  rival.on('pageerror', (err) => console.error('    page error:', err.message));
+  await rival.goto(`http://localhost:${HTTP_PORT}/`);
+  await rival.waitForSelector('.tray .intern[data-status="online"]', { timeout: 15000 });
+  ok('a saved dial-in URL is re-dialled automatically on load');
+  await page.waitForSelector('.tray .intern[data-status="taken"]', { timeout: 5000 });
+  expect(/LINE TAKEN/.test(await page.textContent('.tray .intern')), 'the losing window shows LINE TAKEN in the tray');
+  await page.waitForSelector('.intern-app .line-taken:not([hidden])');
+  expect(/LINE TAKEN BY ANOTHER TERMINAL/i.test(await page.textContent('.intern-app .line-taken')), 'INTERN.EXE shows LINE TAKEN BY ANOTHER TERMINAL with a Redial button');
+  await page.screenshot({ path: `${SHOTS}/smoke-line-taken.png` });
+  await page.click('.intern-app .line-taken .redial');
+  await page.waitForSelector('.tray .intern[data-status="online"]', { timeout: 10000 });
+  await rival.waitForSelector('.tray .intern[data-status="taken"]', { timeout: 5000 });
+  ok('Redial takes the line back');
+  await rival.close();
+  expect(/mainframePower/.test(await tool('whoami')), 'whoami shows mainframe power');
+
+  // A short drive: hold the clutch to crank, select first, let it go, then grab second.
+  await page.evaluate(() => {
+    const { dispatch, actions, getState } = window.NIGHT_SHIFT;
+    const s = getState();
+    dispatch(actions.hydrate({ ...s, power: { ...s.power, level: 60 } }));
+    dispatch(actions.openFile('geargrind'));
+  });
+  await page.waitForSelector('.geargrind canvas');
+  await page.waitForSelector('.gg-hint:not([hidden])');
+  expect(/CHARGE ZONE/.test(await page.textContent('.gg-hint')), 'first open shows the how-to-charge hint card');
+  await page.screenshot({ path: `${SHOTS}/smoke-geargrind-hint.png` });
+  await page.click('.gg-hint [data-ctl="hint-ok"]');
+
+  // Focus: type in the intern's chat, then click Gear Grind's title bar. Space is the clutch now.
+  await page.evaluate(() => window.NIGHT_SHIFT.dispatch(window.NIGHT_SHIFT.actions.openFile('intern')));
+  await page.click('.intern-app .compose input');
+  await page.fill('.intern-app .compose input', '');
+  await page.keyboard.type('hold on');
+  await page.click('.window:has(.geargrind) .titlebar .title');
+  await page.keyboard.down('Space');
+  await page.waitForTimeout(150);
+  const focusCheck = await page.evaluate(() => ({ clutch: document.querySelector('.geargrind').dataset.clutch, chat: document.querySelector('.intern-app .compose input').value }));
+  expect(focusCheck.clutch === 'in' && focusCheck.chat === 'hold on', 'clicking Gear Grind takes the keyboard: Space works the clutch, nothing typed into chat', JSON.stringify(focusCheck));
+  await page.keyboard.up('Space');
+  await page.click('.intern-app .compose input');
+  await page.click('.geargrind canvas');
+  await page.keyboard.press('Space');
+  expect((await page.inputValue('.intern-app .compose input')) === 'hold on', 'clicking the road view takes the keyboard too');
+
+  const before = await page.evaluate(() => window.NIGHT_SHIFT.getState().stats.distance ?? 0);
+  await page.keyboard.down('Space');
+  await page.waitForTimeout(1200);
+  await page.keyboard.press('ShiftRight');
+  await page.waitForTimeout(250);
+  await page.keyboard.up('Space');
+  await page.waitForTimeout(2500);
+  await page.keyboard.down('Space');
+  await page.keyboard.press('ShiftRight');
+  await page.waitForTimeout(250);
+  await page.keyboard.up('Space');
+  await page.waitForTimeout(2500);
+  const drove = await page.evaluate(() => ({ distance: window.NIGHT_SHIFT.getState().stats.distance ?? 0, gen: window.NIGHT_SHIFT.getState().power.generator }));
+  expect(drove.distance > before, 'driving GEARGRIND.EXE moves the generator along', JSON.stringify(drove));
+  const ggStatus = await page.textContent('.gg-status');
+  expect(/CHARGING|NOT CHARGING/.test(ggStatus) && /drain/.test(ggStatus), 'Gear Grind shows a live charging status', ggStatus);
+  const pwr = await tool('whoami');
+  expect(/"generator": "RUNNING/.test(pwr), 'the intern sees the generator running', pwr);
+  await page.screenshot({ path: `${SHOTS}/smoke-geargrind.png` });
+  await page.evaluate(() => {
+    const { dispatch, actions, getState } = window.NIGHT_SHIFT;
+    const s = getState();
+    dispatch(actions.hydrate({ ...s, power: { ...s.power, level: 25 } }));
+  });
+  await page.waitForSelector('.tray .power[data-status="brownout"]');
+  expect(/BROWNOUT/.test(await page.textContent('.tray .power')), 'the tray power meter signposts a brownout');
+  await page.evaluate(() => {
+    const { dispatch, actions, getState } = window.NIGHT_SHIFT;
+    const s = getState();
+    dispatch(actions.hydrate({ ...s, power: { ...s.power, level: 60 } }));
+  });
+
   // No agent: the scripted intern, replaying Simon's playtest in a fresh browser profile.
   const solo = await (await browser.newContext({ viewport: { width: 1024, height: 768 } })).newPage();
   solo.on('pageerror', (err) => console.error('    page error:', err.message));
@@ -157,7 +238,34 @@ const run = async () => {
   await solo.waitForFunction(() => window.NIGHT_SHIFT.getState().puzzles.badge.unlocked.includes(3));
   ok('player types the key as read out (0117) and BADGE.DB accepts it');
   await scripted("what's the sequence?", /XOR before you shift/);
+  await scripted('how do I keep the power up?', /% ?|GEARGR~1|drive/i);
   await solo.screenshot({ path: `${SHOTS}/smoke-scripted.png` });
+
+  // 06:00: the end-of-shift screen, then a fresh shift. Never a dead save.
+  await solo.evaluate(() => {
+    const { dispatch, actions, getState } = window.NIGHT_SHIFT;
+    const s = getState();
+    // Keep the lights on so the shift ends at 06:00 rather than in a blackout.
+    dispatch(actions.hydrate({ ...s, power: { ...s.power, config: { ...s.power.config, drainPerMinute: 0 } } }));
+    dispatch(actions.tick(480));
+  });
+  await solo.waitForSelector('#shiftend:not([hidden]) .new-shift');
+  const card = await solo.textContent('#shiftend');
+  expect(/06:00/.test(card) && /scripted/i.test(card), 'end-of-shift screen shows the summary', card.replace(/\s+/g, ' '));
+  await solo.screenshot({ path: `${SHOTS}/smoke-shiftend.png` });
+  await solo.reload();
+  await solo.waitForSelector('#shiftend:not([hidden]) .new-shift');
+  ok('a finished shift reloads to the end-of-shift screen, not a dead desktop');
+  await solo.click('#shiftend .new-shift');
+  await solo.waitForFunction(() => window.NIGHT_SHIFT.getState().phase === 'clockin');
+  const fresh = await solo.evaluate(() => {
+    const s = window.NIGHT_SHIFT.getState();
+    return { shift: s.shiftNumber, elapsed: s.clock.elapsed, unlocked: s.puzzles.badge.unlocked.length, level: s.intern.level, end: s.shiftEnd };
+  });
+  expect(fresh.shift === 2 && fresh.elapsed === 0 && fresh.unlocked === 0 && fresh.level === 1 && !fresh.end, 'Clock in for another shift starts a fresh game', JSON.stringify(fresh));
+  await solo.evaluate(() => window.NIGHT_SHIFT.dispatch(window.NIGHT_SHIFT.actions.clockIn()));
+  await solo.waitForFunction(() => window.NIGHT_SHIFT.getState().phase === 'desktop');
+  ok('and the new shift is playable');
   console.log(`\nSmoke test passed (${step} checks). Screenshots in ${SHOTS}`);
 };
 

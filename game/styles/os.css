@@ -107,6 +107,30 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
 .timecard .punch { font-size: 40px; text-align: center; color: #a00; letter-spacing: 4px; margin-bottom: 14px; }
 .timecard button { width: 100%; font: bold 15px var(--mono); padding: 10px; }
 
+/* ---------- End of shift ---------- */
+#shiftend {
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 50% 40%, #201808, #000 70%);
+}
+.shiftend-card {
+  width: 460px;
+  background: #f1e7c8;
+  color: #3a2a10;
+  padding: 18px 22px 22px;
+  font: 14px var(--mono);
+  box-shadow: 0 0 0 2px #8a7650, 6px 8px 0 #000;
+  transform: rotate(1deg);
+}
+.shiftend-card h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: 4px; color: #a00; border-bottom: 2px solid #8a7650; padding-bottom: 6px; }
+.shiftend-card.blackout { background: #d9d2bc; filter: saturate(0.6); }
+.shiftend-card .why { margin: 8px 0 12px; }
+.shiftend-card dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 14px; }
+.shiftend-card dt { color: #8a7650; }
+.shiftend-card dd { margin: 0; }
+.shiftend-card .teaser { color: #a00; font-size: 12px; letter-spacing: 1px; border-top: 1px dashed #8a7650; padding-top: 8px; }
+.shiftend-card button { width: 100%; font: bold 15px var(--mono); padding: 10px; }
+
 /* ---------- Desktop ---------- */
 #desktop {
   position: absolute;
@@ -263,8 +287,14 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
 }
 .bits span.on { background: var(--phosphor); box-shadow: 0 0 6px var(--phosphor); border-color: #9fffb8; }
 .bits.target span.on { background: #1d6a35; box-shadow: none; border-color: #2c8a48; }
-.bits span.off-wrong { border-color: #6a3c00; }
+.bits span.off-wrong { border: 2px dashed var(--amber); background: rgba(255, 176, 0, 0.12); }
 .bits span.on.wrong { background: var(--amber); box-shadow: 0 0 6px var(--amber); border-color: #ffd27a; }
+.bitrot .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font: 11px var(--mono); color: #9fd8ae; }
+.bitrot .legend span { display: inline-flex; align-items: center; gap: 5px; }
+.bitrot .legend i { width: 11px; height: 11px; box-sizing: border-box; background: #0b2014; border: 1px solid #143820; }
+.bitrot .legend i.on { background: var(--phosphor); border-color: #9fffb8; }
+.bitrot .legend i.on.wrong { background: var(--amber); border-color: #ffd27a; }
+.bitrot .legend i.off-wrong { border: 2px dashed var(--amber); background: rgba(255, 176, 0, 0.12); }
 .bitrot.solved .bits:not(.target) span.on { background: #9fffb8; }
 .ops { display: flex; flex-wrap: wrap; gap: 6px; }
 .ops button { font-family: var(--mono); min-width: 96px; }
@@ -309,6 +339,21 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
 .intern-app[data-status='online'] .led { background: #0f0; box-shadow: 0 0 4px #0f0; }
 .intern-app[data-status='connecting'] .led { background: var(--amber); animation: blink 0.8s steps(1) infinite; }
 .intern-app .status { font-size: 11px; color: #333; }
+.intern-app.brownout .status { color: #a00; }
+.intern-app .line-taken {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 6px 8px;
+  background: #000;
+  color: #ffb000;
+  font: 12px/1.3 var(--mono);
+  border: 2px solid #ffb000;
+}
+.intern-app .line-taken[hidden] { display: none; }
+.intern-app .line-taken b { flex-basis: 100%; letter-spacing: 1px; }
+.intern-app .line-taken span { flex: 1; }
 .intern-app .chat {
   flex: 1;
   overflow: auto;
@@ -364,7 +409,7 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
   height: 100%;
   box-shadow: inset -1px -1px var(--hi), inset 1px 1px var(--lo);
 }
-.tray .intern {
+.tray .intern, .tray .power {
   font-size: 11px;
   color: var(--lo);
   min-width: 0;
@@ -372,9 +417,14 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
   background: none;
   box-shadow: none;
 }
-.tray .intern:active:not(:disabled) { padding: 0 2px; box-shadow: none; }
+.tray .intern:active:not(:disabled), .tray .power:active:not(:disabled) { padding: 0 2px; box-shadow: none; }
 .tray .intern.online { color: #070; }
 .tray .intern.unread { color: #a00; font-weight: bold; }
+.tray .intern.taken { color: #a00; font-weight: bold; }
+.tray .power { font-family: var(--mono); color: #070; }
+.tray .power[data-status='flicker'] { color: #8a5a00; }
+.tray .power[data-status='brownout'], .tray .power[data-status='critical'] { color: #a00; font-weight: bold; }
+.tray .power[data-status='critical'] { animation: blink 1s steps(2) infinite; }
 .tray .clock { font-family: var(--mono); font-size: 13px; }
 
 #start-menu {
@@ -426,3 +476,51 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
   box-shadow: 1px 1px 0 #000;
 }
 #alert .buttons { display: flex; justify-content: center; padding-bottom: 8px; }
+
+/* GEARGRIND.EXE */
+.geargrind { position: relative; display: flex; flex-direction: column; gap: 6px; height: 100%; padding: 6px; box-sizing: border-box; outline: none; }
+.window.focused .geargrind:focus-within canvas { box-shadow: inset -1px -1px var(--hi), inset 1px 1px var(--lo), 0 0 0 2px var(--phosphor); }
+.geargrind canvas { width: 100%; aspect-ratio: 5 / 2; flex: 0 1 auto; min-height: 0; object-fit: contain; background: #000; image-rendering: pixelated; box-shadow: inset -1px -1px var(--hi), inset 1px 1px var(--lo); }
+.gg-power { display: flex; align-items: center; gap: 8px; font: 12px var(--mono); }
+.gg-power .meter { flex: 1; height: 14px; background: #000; box-shadow: inset -1px -1px var(--hi), inset 1px 1px var(--lo); padding: 2px; box-sizing: border-box; }
+.gg-power .fill { height: 100%; background: var(--phosphor); transition: width 0.25s linear; }
+.gg-power[data-status='flicker'] .fill { background: var(--amber); }
+.gg-power[data-status='brownout'] .fill, .gg-power[data-status='critical'] .fill { background: #d02020; }
+.gg-power .pct { min-width: 40px; text-align: right; }
+.gg-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.gg-controls .spacer { flex: 1; }
+.gg-controls kbd { font: 10px var(--mono); color: var(--lo); margin-left: 4px; }
+.gg-help { font-size: 11px; color: #333; }
+.gg-status { font: bold 11px var(--mono); padding: 2px 4px; background: #000; color: #ff6040; overflow-wrap: anywhere; min-height: 2.6em; }
+.gg-status .drain { white-space: nowrap; color: #808080; }
+.gg-status[data-charging='yes'] { color: var(--phosphor); }
+.gg-status[data-charging='slow'] { color: var(--amber); }
+.gg-controls button.pressed { box-shadow: inset 1px 1px var(--lo), inset -1px -1px var(--hi); }
+.gg-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); z-index: 2; }
+.gg-hint[hidden] { display: none; }
+.gg-hint .card { max-width: 440px; background: var(--face, #c0c0c0); color: #000; padding: 10px 12px; font-size: 12px; box-shadow: inset -1px -1px #000, inset 1px 1px #fff, 3px 3px 0 rgba(0, 0, 0, 0.4); }
+.gg-hint .card p, .gg-hint .card ul { margin: 6px 0; }
+.gg-hint .card ul { padding-left: 18px; }
+.gg-hint .card kbd { font: bold 11px var(--mono); padding: 0 3px; border: 1px solid #666; background: #eee; }
+.gg-power .meter { position: relative; }
+.gg-power .meter::after { content: ''; position: absolute; top: 0; bottom: 0; left: var(--brownout, 30%); border-left: 1px dashed #d02020; }
+
+/* Low mainframe power: dim and flicker the desktop. */
+body[data-power='flicker'] #desktop { animation: brownflicker 7s infinite; }
+body[data-power='brownout'] #desktop { filter: brightness(0.82) sepia(0.2); animation: brownflicker 3.5s infinite; }
+body[data-power='critical'] #desktop { filter: brightness(0.62) sepia(0.4); animation: brownflicker 1.6s infinite; }
+body.surge #desktop { animation: surge 0.9s steps(6); }
+@keyframes brownflicker {
+  0%, 91%, 95%, 100% { opacity: 1; }
+  92% { opacity: 0.7; }
+  94% { opacity: 0.88; }
+}
+@keyframes surge {
+  0% { filter: brightness(2.2) contrast(1.4); }
+  30% { filter: brightness(0.2); }
+  60% { filter: brightness(1.6); }
+  100% { filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body[data-power] #desktop, body.surge #desktop { animation: none; }
+}

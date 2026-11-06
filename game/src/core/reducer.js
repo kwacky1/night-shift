@@ -6,6 +6,9 @@ import { applyOp, isSolved, opLabel } from '../logic/puzzle.js';
 import { toHex, toWord } from '../logic/bits.js';
 import { parseKey } from '../logic/words.js';
 import { clampLevel, internActionError, internLevel, isOpUnlocked, levelInfo } from './permissions.js';
+import { chargePower, drainForMinutes, drainRate, isBitrotPowered } from './power.js';
+import { endShift } from './shift.js';
+import { advanceStory, STORY_TRIGGERS } from './story.js';
 
 const LOG_LIMIT = 100;
 const MESSAGE_LIMIT = 200;
@@ -15,6 +18,7 @@ const WINDOW_SIZES = {
   viewer: { w: 600, h: 380 },
   bitrot: { w: 500, h: 420 },
   intern: { w: 380, h: 420, x: 680, y: 40 },
+  geargrind: { w: 540, h: 415, x: 60, y: 40 },
 };
 
 // 8.3 filenames, DOS style. Stored upper case.
@@ -75,7 +79,7 @@ const openWindow = (state, kind, fileId) => {
 const openFile = (state, id) => {
   const file = state.files[id];
   if (!file) return state;
-  if (file.hidden) return alert(state, 'Open', `Cannot find '${id}'. Make sure the path and file name are correct.`);
+  if (file.hidden || file.dormant) return alert(state, 'Open', `Cannot find '${id}'. Make sure the path and file name are correct.`);
   if (file.type === 'folder') return openWindow(state, 'explorer', id);
   if (file.type === 'app' && file.app && WINDOW_SIZES[file.app]) return openWindow(state, file.app, id);
   if (file.locked && file.puzzleId && state.puzzles[file.puzzleId]) {
@@ -127,6 +131,8 @@ const renameFile = (state, { id, name }) => {
   return s;
 };
 
+const bumpStat = (state, key, by = 1) => ({ ...state, stats: { ...state.stats, [key]: (state.stats?.[key] ?? 0) + by } });
+
 const applyPuzzleOp = (state, action) => {
   const { puzzleId, opIndex } = action;
   const p = state.puzzles[puzzleId];
@@ -134,17 +140,26 @@ const applyPuzzleOp = (state, action) => {
   if (!p || !op || p.solved || p.failed || !isOpUnlocked(p, opIndex)) return state;
   const byIntern = action.actor === 'intern';
   if (byIntern && internActionError(state, action)) return state;
+  if (!isBitrotPowered(state)) return state;
   const value = applyOp(p.value, op);
   const history = [...p.history, p.value];
   const solved = isSolved(value, p);
   const failed = !solved && history.length >= p.moveLimit;
   let s = updatePuzzle(state, puzzleId, { value, history, solved, failed });
   const fileNames = Object.values(s.files).filter((f) => f.puzzleId === puzzleId);
-  if (byIntern) s = post(s, 'system', `#0118 applied ${opLabel(op)} to ${fileNames.map((f) => f.name).join(', ') || puzzleId}.`);
+  if (byIntern) {
+    s = bumpStat(s, 'internOps');
+    s = post(s, 'system', `#0118 applied ${opLabel(op)} to ${fileNames.map((f) => f.name).join(', ') || puzzleId}.`);
+  }
   if (solved) {
     for (const f of fileNames) s = updateFile(s, f.id, { locked: false });
     s = log(s, `Bit Rot cleared: ${fileNames.map((f) => f.name).join(', ') || puzzleId} recovered in ${history.length} moves.`);
     if (p.onSolve?.internLevel !== undefined) s = setInternLevel(s, p.onSolve.internLevel, p.onSolve.message);
+    else if (p.onSolve?.message) s = post(s, 'system', p.onSolve.message);
+    if (p.onSolve?.drainScale !== undefined) {
+      s = { ...s, power: { ...s.power, drainScale: Math.max(0, Math.min(1, p.onSolve.drainScale)) } };
+      s = log(s, `Generator governor recalibrated. Power drain now ${Math.round(s.power.drainScale * 100)}%.`);
+    }
   } else if (failed) {
     s = log(s, `${opLabel(op)} -> ${toHex(value)}. Out of moves. SECTOR LOST.`);
   }
@@ -163,6 +178,7 @@ const enterKey = (state, action) => {
     return action.actor === 'intern' ? s : alert(s, 'BITROT.EXE', 'KEY REJECTED.\n\nThat is not the override key for this sector.');
   }
   let s = updatePuzzle(state, p.id, { unlocked: [...(p.unlocked ?? []), action.opIndex] });
+  if (action.actor === 'intern') s = bumpStat(s, 'internKeys');
   s = log(s, `${who} entered the override key for ${p.id}.`);
   return post(s, 'system', `Override key accepted for ${p.title ?? p.id}. ${opLabel(op)} unlocked.`);
 };
@@ -176,6 +192,8 @@ const chatSend = (state, action) => {
     extra.scripted = true;
   }
   let s = post(state, from, text, extra);
+  if (action.actor === 'intern') s = bumpStat(s, 'internMessages');
+  else if (extra.scripted) s = bumpStat(s, 'scriptedReplies');
   if (extra.scripted && typeof action.thread === 'string' && /^[a-z0-9_-]{1,32}$/i.test(action.thread)) {
     s = { ...s, intern: { ...s.intern, lastTopic: action.thread } };
   }
@@ -190,10 +208,44 @@ const chatSend = (state, action) => {
   return s;
 };
 
-export const reducer = (state, action) => {
+const driveReport = (state, a) => {
+  const num = (v, max) => (Number.isFinite(v) ? Math.max(0, Math.min(max, v)) : 0);
+  let s = chargePower(state, a.charge);
+  const generator = {
+    running: Boolean(a.running),
+    stalled: Boolean(a.stalled),
+    gear: Math.round(num(a.gear, 9)),
+    rpm: Math.round(num(a.rpm, 20000)),
+  };
+  const g = s.power.generator;
+  if (g.running !== generator.running || g.stalled !== generator.stalled || g.gear !== generator.gear || g.rpm !== generator.rpm) {
+    s = { ...s, power: { ...s.power, generator } };
+  }
+  const distance = num(a.distance, 1000);
+  const stalls = Math.round(num(a.stalls, 10));
+  const charged = s.power.level - state.power.level;
+  if (distance || stalls || charged) {
+    const st = s.stats;
+    s = { ...s, stats: { ...st, distance: Math.round((st.distance + distance) * 10) / 10, stalls: st.stalls + stalls, charged: Math.round((st.charged + charged) * 100) / 100 } };
+  }
+  if (stalls && !state.power.generator.stalled) s = log(s, 'Generator stalled.');
+  return s;
+};
+
+// Once the shift is over, only these actions do anything.
+const AFTER_SHIFT = new Set([T.HYDRATE, T.NEW_SHIFT, T.CHAT_READ, T.DISMISS_ALERT]);
+
+const baseReducer = (state, action) => {
+  if (state.phase === 'over' && !AFTER_SHIFT.has(action?.type)) return state;
   switch (action?.type) {
     case T.HYDRATE:
       return action.state;
+
+    case T.NEW_SHIFT: {
+      const next = action.state;
+      if (state.phase !== 'over' || !next || typeof next !== 'object' || !next.files || !next.puzzles) return state;
+      return { ...next, phase: 'clockin', shiftNumber: (state.shiftNumber ?? 1) + 1 };
+    }
 
     case T.BOOT_COMPLETE:
       return state.phase === 'boot' ? { ...state, phase: 'clockin' } : state;
@@ -204,14 +256,21 @@ export const reducer = (state, action) => {
         : state;
 
     case T.TICK: {
-      if (state.phase !== 'desktop' || state.flags.shiftOver) return state;
-      const elapsed = Math.min(state.clock.length, state.clock.elapsed + Math.max(0, action.minutes ?? 1));
-      let s = { ...state, clock: { ...state.clock, elapsed } };
-      if (elapsed >= state.clock.length) {
-        s = alert(log({ ...s, flags: { ...s.flags, shiftOver: true } }, 'Shift over.'), 'SHIFT OVER', '06:00. The day crew will be in soon.\nThat is the end of this build.');
-      }
+      if (state.phase !== 'desktop') return state;
+      let minutes = Math.min(state.clock.length - state.clock.elapsed, Math.max(0, action.minutes ?? 1));
+      // A long tick that runs the mainframe dry stops the clock at the blackout, not at the end.
+      const rate = drainRate(state);
+      if (rate > 0) minutes = Math.min(minutes, Math.max(1, Math.ceil(state.power.level / rate)));
+      const elapsed = state.clock.elapsed + minutes;
+      let s = drainForMinutes({ ...state, clock: { ...state.clock, elapsed } }, minutes);
+      if (s.power.level <= 0) return endShift(s, 'blackout');
+      if (elapsed >= state.clock.length) return endShift(s, 'clock');
       return s;
     }
+
+    case T.DRIVE_REPORT:
+      if (state.phase !== 'desktop') return state;
+      return driveReport(state, action);
 
     case T.OPEN_FILE:
       return openFile(state, action.id);
@@ -293,4 +352,11 @@ export const reducer = (state, action) => {
     default:
       return state;
   }
+};
+
+// The root reducer: the base rules, then any story beats the change has made due.
+export const reducer = (state, action) => {
+  const next = baseReducer(state, action);
+  if (next === state || next.phase !== 'desktop' || !STORY_TRIGGERS.has(action.type)) return next;
+  return advanceStory(next, { post, log, alert, setInternLevel });
 };

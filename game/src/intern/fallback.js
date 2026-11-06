@@ -8,7 +8,13 @@
 //   2. A message that is only follow-up noise ("please", "go on", "?") -> the last topic.
 //   3. The first eligible topic (in file order) whose keyword matches.
 //   4. No match -> the last topic, else default.
+// Topics only count once their sector/file is on the drive (`when`), and when a message matches
+// several topics the one about the sector the player is looking at wins.
+//
+// fallbackNag(prev, next, script) is the unprompted bit: it moans about mainframe power.
 import { internLevel, isOpUnlocked } from '../core/permissions.js';
+import { livePuzzles } from '../core/selectors.js';
+import { POWER_STATUSES, powerConfig, powerLevel, powerStatus } from '../core/power.js';
 import { hexInWords } from '../logic/words.js';
 import { toHex, toWord } from '../logic/bits.js';
 import { solve } from '../logic/puzzle.js';
@@ -50,7 +56,17 @@ const isUnlocked = (state, puzzleId) => {
   return p.solved || (k >= 0 && isOpUnlocked(p, k));
 };
 
-const isEligible = (state, t) => !t.detect && (t.when !== 'unlocked' || isUnlocked(state, t.puzzle));
+const isRevealed = (state, fileId) => {
+  const f = state?.files?.[fileId];
+  return Boolean(f && !f.dormant);
+};
+
+const isEligible = (state, t) => {
+  if (t.detect) return false;
+  if (t.when === 'unlocked') return isUnlocked(state, t.puzzle);
+  if (t.when === 'revealed') return isRevealed(state, t.file);
+  return true;
+};
 
 const isFollowUp = (script, lower) => {
   let rest = lower;
@@ -58,12 +74,18 @@ const isFollowUp = (script, lower) => {
   return rest.replace(/[\s?!.,]+/g, '') === '' && lower.trim() !== '';
 };
 
+const topicPuzzle = (t) => t.puzzle ?? t.leaks?.puzzle;
+
 export const topicFor = (script, text, state = {}) => {
   const lower = String(text ?? '').toLowerCase();
   const lastId = state.intern?.lastTopic;
   const last = lastId ? script.topics.find((t) => t.id === lastId && (t.detect || isEligible(state, t))) : undefined;
   if (last && isFollowUp(script, lower)) return last;
-  const hit = script.topics.find((t) => isEligible(state, t) && t.keywords.some((k) => matches(lower, k)));
+  const hits = script.topics.filter((t) => isEligible(state, t) && t.keywords.some((k) => matches(lower, k)));
+  // "the key" means the key for the sector in front of the player, not the first one in the file.
+  // Only sector topics are re-ordered; a general topic that matches first still wins.
+  const focus = hits.length > 1 && topicPuzzle(hits[0]) && state.puzzles ? focusPuzzle(state)?.id : undefined;
+  const hit = (focus && hits.find((t) => topicPuzzle(t) === focus)) || hits[0];
   return hit ?? last ?? script.topics.find((t) => t.id === 'default');
 };
 
@@ -138,10 +160,11 @@ export const describedValues = (text, roles) => {
 
 // The sector the player is most likely talking about.
 const focusPuzzle = (state) => {
-  const puzzleOf = (w) => state.puzzles[state.files[w?.fileId]?.puzzleId];
+  const live = livePuzzles(state);
+  const puzzleOf = (w) => live.find((p) => p.id === state.files[w?.fileId]?.puzzleId);
   const focused = state.windows?.find((w) => w.id === state.focusedWindowId);
   const open = [...(state.windows ?? [])].reverse().map(puzzleOf).filter((p) => p && !p.solved);
-  const unsolved = Object.values(state.puzzles).filter((p) => !p.solved);
+  const unsolved = live.filter((p) => !p.solved);
   return (puzzleOf(focused)?.solved ? null : puzzleOf(focused)) ?? open[0] ?? unsolved.find((p) => p.playerHides?.length) ?? unsolved[0];
 };
 
@@ -166,10 +189,11 @@ const heard = (state, p) => Boolean(p && (state.intern?.heardTargets ?? []).incl
 const patternReply = (state, text, topic) => {
   const values = describedValues(text, topic.roles);
   if (!values.length) return null;
-  const puzzles = Object.values(state.puzzles);
+  const puzzles = livePuzzles(state);
   const byTarget = (v) => puzzles.find((p) => p.target === v && !p.solved) ?? puzzles.find((p) => p.target === v);
   const byCurrent = (v) => puzzles.find((p) => p.value === v && !p.solved);
-  for (const v of values) if (!v.role) v.role = byTarget(v.value) ? 'target' : byCurrent(v.value) ? 'current' : null;
+  // Only unlabelled binary rows are guessed from their value. Bare hex is probably a key.
+  for (const v of values) if (!v.role && v.binary) v.role = byTarget(v.value) ? 'target' : byCurrent(v.value) ? 'current' : null;
 
   const target = values.find((v) => v.role === 'target');
   if (target) {
@@ -196,10 +220,11 @@ const patternReply = (state, text, topic) => {
 
 const pick = (lines, count, cycle) => lines[cycle ? count % lines.length : Math.min(count, lines.length - 1)];
 
-// Fill {{key}} / {{opTypes}}. Returns null when a placeholder can't be filled (no route left).
+// Fill {{key}} / {{opTypes}} / {{power}}. Returns null when a placeholder can't be filled (no route left).
 const fill = (line, state, topic) => {
   let missing = false;
   const text = line.replace(/\{\{(\w+)\}\}/g, (m, k) => {
+    if (k === 'power') return `${Math.round(powerLevel(state))}%`;
     if (k === 'key') {
       const p = state.puzzles[topic.leaks?.puzzle];
       const mask = p?.ops[keyedIndex(p)]?.mask;
@@ -244,14 +269,40 @@ export const fallbackReply = (state, text, script) => {
     return { text: fill(pick(topic.lockedLines, pester[key] ?? 0, true), state, topic), topic: key, thread };
   }
   if (topic.unlockedLine && topic.leaks && isUnlocked(state, topic.leaks.puzzle)) return { text: topic.unlockedLine, topic: `${topic.id}:unlocked`, thread };
+  if (topic.lowLines && powerLevel(state) < powerConfig(state).nagBelow) {
+    const key = `${topic.id}:low`;
+    return { text: fill(pick(topic.lowLines, pester[key] ?? 0, true), state, topic), topic: key, thread };
+  }
   const line = fill(pick(topic.lines, pester[topic.id] ?? 0, topic.cycle), state, topic);
   if (line === null) return { text: pick(topic.stuckLines, pester[`${topic.id}:stuck`] ?? 0, true), topic: `${topic.id}:stuck`, thread };
   return { text: line, topic: topic.id, thread };
 };
 
+// ---- unprompted power nags ----------------------------------------------------------------
+
+const statusRank = (state) => POWER_STATUSES.indexOf(powerStatus(state));
+
+// Called with the state before and after a change. Returns { text, topic } when the scripted
+// intern should moan about mainframe power, else null. It nags when power first drops under
+// power.config.nagBelow, whenever the status gets worse, and every nag.everyMinutes while low.
+export const fallbackNag = (prev, next, script) => {
+  const nag = script.nag;
+  if (!nag || !prev?.power || !next?.power || next.phase !== 'desktop') return null;
+  const level = powerLevel(next);
+  if (level <= 0 || level >= powerConfig(next).nagBelow) return null;
+  const crossed = powerLevel(prev) >= powerConfig(next).nagBelow;
+  const worse = statusRank(next) > statusRank(prev);
+  const every = nag.everyMinutes ?? 0;
+  const periodic = every > 0 && Math.floor(next.clock.elapsed / every) > Math.floor(prev.clock.elapsed / every);
+  if (!crossed && !worse && !periodic) return null;
+  const kind = ['brownout', 'critical'].includes(powerStatus(next)) && nag.brownoutLines ? 'brownoutLines' : 'lines';
+  const key = kind === 'lines' ? 'nag' : 'nag:brownout';
+  return { text: fill(pick(nag[kind], next.intern?.pester?.[key] ?? 0, true), next, {}), topic: key };
+};
+
 // ---- validation ---------------------------------------------------------------------------
 
-const TOPIC_FIELDS = new Set(['id', 'keywords', 'lines', 'cycle', 'thread', 'requiresLevel', 'lockedLines', 'leaks', 'doneLine', 'unlockedLine', 'when', 'puzzle', 'stuckLines', 'detect', 'roles', 'currentLines', 'currentWrongLines', 'wrongLines', 'unknownLines', 'doneLines']);
+const TOPIC_FIELDS = new Set(['id', 'keywords', 'lines', 'cycle', 'thread', 'requiresLevel', 'lockedLines', 'leaks', 'doneLine', 'unlockedLine', 'when', 'puzzle', 'file', 'stuckLines', 'lowLines', 'detect', 'roles', 'currentLines', 'currentWrongLines', 'wrongLines', 'unknownLines', 'doneLines']);
 const PATTERN_LISTS = ['lines', 'currentLines', 'currentWrongLines', 'wrongLines', 'unknownLines', 'stuckLines', 'doneLines'];
 const PATTERN_VARS = ['plan', 'target', 'targetBits', 'value', 'valueBits', 'actual', 'actualBits'];
 const isLines = (v) => Array.isArray(v) && v.length > 0 && v.every((l) => typeof l === 'string' && l.trim());
@@ -259,11 +310,18 @@ const isWords = (v) => Array.isArray(v) && v.every((k) => typeof k === 'string' 
 const placeholders = (lines) => (lines ?? []).flatMap((l) => [...String(l).matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]));
 
 // Returns a list of problems with the script; empty means it is well formed.
-// Pass { puzzleIds } to also check that puzzle references exist.
-export const validateScript = (script, { puzzleIds } = {}) => {
+// Pass { puzzleIds, fileIds } to also check that puzzle and file references exist.
+export const validateScript = (script, { puzzleIds, fileIds } = {}) => {
   const errors = [];
   if (!Array.isArray(script?.topics)) return ['topics must be an array'];
   if (script.followUps !== undefined && !isWords(script.followUps)) errors.push('followUps must be lowercase strings');
+  if (script.nag !== undefined) {
+    for (const k of Object.keys(script.nag)) if (!['lines', 'brownoutLines', 'everyMinutes'].includes(k)) errors.push(`nag: unknown field ${k}`);
+    if (!isLines(script.nag.lines)) errors.push('nag: needs lines');
+    if (script.nag.brownoutLines !== undefined && !isLines(script.nag.brownoutLines)) errors.push('nag: brownoutLines must be lines');
+    if (script.nag.everyMinutes !== undefined && !(Number.isInteger(script.nag.everyMinutes) && script.nag.everyMinutes > 0)) errors.push('nag: everyMinutes must be a positive integer');
+    for (const v of placeholders([...(script.nag.lines ?? []), ...(script.nag.brownoutLines ?? [])])) if (v !== 'power') errors.push(`nag: placeholder {{${v}}} not allowed here`);
+  }
   const ids = new Set();
   const checkPuzzle = (t, id) => {
     if (typeof id !== 'string') errors.push(`${t.id}: puzzle reference must be a string`);
@@ -285,13 +343,18 @@ export const validateScript = (script, { puzzleIds } = {}) => {
       continue;
     }
     if (t.requiresLevel !== undefined && !isLines(t.lockedLines)) errors.push(`${t.id}: requiresLevel needs lockedLines`);
-    if (t.when !== undefined && t.when !== 'unlocked') errors.push(`${t.id}: when must be "unlocked"`);
-    if (t.when !== undefined && t.puzzle === undefined) errors.push(`${t.id}: when needs a puzzle`);
+    if (t.when !== undefined && !['unlocked', 'revealed'].includes(t.when)) errors.push(`${t.id}: when must be "unlocked" or "revealed"`);
+    if (t.when === 'unlocked' && t.puzzle === undefined) errors.push(`${t.id}: when needs a puzzle`);
+    if (t.when === 'revealed' && typeof t.file !== 'string') errors.push(`${t.id}: when "revealed" needs a file`);
+    if (t.file !== undefined && t.when !== 'revealed') errors.push(`${t.id}: file is only used with when "revealed"`);
+    if (typeof t.file === 'string' && fileIds && !fileIds.includes(t.file)) errors.push(`${t.id}: unknown file ${t.file}`);
+    if (t.lowLines !== undefined && !isLines(t.lowLines)) errors.push(`${t.id}: lowLines must be lines`);
     if (t.puzzle !== undefined) checkPuzzle(t, t.puzzle);
     if (t.leaks) checkPuzzle(t, t.leaks.puzzle);
     if (t.leaks && !String(t.lines?.at(-1)).includes('{{key}}')) errors.push(`${t.id}: last line must leak {{key}}`);
     if (t.unlockedLine !== undefined && !t.leaks) errors.push(`${t.id}: unlockedLine needs leaks`);
-    for (const v of placeholders([...(t.lines ?? []), ...(t.lockedLines ?? [])])) {
+    for (const v of placeholders([...(t.lines ?? []), ...(t.lockedLines ?? []), ...(t.lowLines ?? [])])) {
+      if (v === 'power') continue;
       if (v === 'key' && t.leaks) continue;
       if (v === 'opTypes' && t.puzzle) continue;
       errors.push(`${t.id}: placeholder {{${v}}} not allowed here`);

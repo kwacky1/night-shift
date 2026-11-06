@@ -22,6 +22,8 @@ export const ActionTypes = Object.freeze({
   CHAT_SEND: 'CHAT_SEND',
   CHAT_READ: 'CHAT_READ',
   DISMISS_ALERT: 'DISMISS_ALERT',
+  DRIVE_REPORT: 'DRIVE_REPORT',
+  NEW_SHIFT: 'NEW_SHIFT',
 });
 
 export const ACTION_TYPE_LIST = Object.freeze(Object.values(ActionTypes));
@@ -50,4 +52,18 @@ export const actions = Object.freeze({
   chatSend: (text, from = 'player', extra = {}) => ({ type: T.CHAT_SEND, text, from, ...extra }),
   chatRead: () => ({ type: T.CHAT_READ }),
   dismissAlert: () => ({ type: T.DISMISS_ALERT }),
+  // GEARGRIND.EXE reports a few times a second: charge earned since the last report, metres driven,
+  // new stalls, and the generator's coarse status (for the intern's whoami).
+  driveReport: ({ charge = 0, distance = 0, stalls = 0, running = false, stalled = false, gear = 0, rpm = 0 } = {}) => ({
+    type: T.DRIVE_REPORT,
+    charge,
+    distance,
+    stalls,
+    running,
+    stalled,
+    gear,
+    rpm,
+  }),
+  // Only valid on the end-of-shift screen. freshState is createInitialState(data).
+  newShift: (freshState) => ({ type: T.NEW_SHIFT, state: freshState }),
 });

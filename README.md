@@ -9,7 +9,7 @@ A [GitHub Game Off 2026](https://itch.io/jam/game-off-2026) entry for the theme 
 A fake retro operating system you navigate with Shift-click, Shift-drag and renaming files.
 
 - **Bit Rot**: corrupted files open with bitwise puzzles (`<<`, `>>`, XOR).
-- **Gear Grind**: the mainframe runs on a manual-gearbox runner. If you stop driving, the power drops.
+- **Gear Grind**: the mainframe runs on a generator with a manual gearbox and a throttle that's stuck open. If you stop driving, the power drops. The intern can't drive.
 - **The intern (MCP)**: connect a real AI agent through a local MCP server. The agent reads hidden files and logs, you see the visual clues, and you solve puzzles together. In the finale, you both try to pin the blame on each other.
 - **No agent?** A built-in scripted intern (deliberately unhelpful) fills in.
 
@@ -29,6 +29,8 @@ npm test        # node:test suites for the game and the MCP server
 npm run smoke   # end to end: MCP client -> server -> the game in headless Chrome (needs Chrome or Edge)
 ```
 
+The dev server sends `Cache-Control: no-store` on every response, so after editing code just refresh the page; no restart needed. Restart it only when you switch worktrees (it serves the `game/` folder of the checkout it was started from). The itch.io build is a static zip and isn't affected.
+
 For itch.io, zip the contents of `game/` (so `index.html` is at the root of the zip) and upload it as an HTML game.
 
 ### Controls
@@ -43,8 +45,54 @@ For itch.io, zip the contents of `game/` (so `index.html` is at the root of the 
 | Shift+drag an icon | Move the whole selection |
 | F2 | Rename the selected file (8.3 names; Enter to save, Esc to cancel) |
 | `1`-`9`, `Z`, `R` | Bit Rot: apply an op, undo, reset (when its window is focused) |
+| Space | Gear Grind: clutch (hold) |
+| Right Shift / Left Shift | Gear Grind: shift up / shift down (only with the clutch in) |
+
+Gear Grind keys only work while GEARGR~1.EXE is the focused window. Clicking anywhere on it (title bar, road, buttons) gives it the keyboard, even if you were just typing to the intern, so Space never ends up in the chat box. Click **Keys...** in its window to rebind them (press clutch, down, up in turn; Esc cancels; clashing keys fall back to the defaults). The bindings are saved per browser. The on-screen Clutch / Down / Up buttons work with a mouse or touch too. Engine sound is **off** by default: click **Sound** to toggle it.
 
 Progress is saved to `localStorage`. **Start > Shut Down** wipes the save.
+
+## The shift
+
+A shift runs from 22:00 to 06:00 at two real seconds per game minute (about 16 minutes). The clock pauses while an alert box is up or the tab is hidden.
+
+### Power and GEARGRIND.EXE
+
+Mainframe power (the `PWR` meter in the tray, amber when LOW, orange at BROWNOUT, red when CRITICAL) drains every game minute. The only way to charge it is to drive Generator 2 in **GEARGR~1.EXE**:
+
+- The throttle is stuck open, so all you do is work the clutch and pick gears. There is no steering.
+- The road has hills. Each gear has its own torque curve: too high a gear for the slope and the engine bogs and stalls; too low and it screams into the limiter and stalls. Grinding (shifting without the clutch) does nothing useful.
+- Keep the rev needle in the green **CHARGE ZONE** on the tacho. Outside it, charging drops away fast. The line under the road says what's happening right now (`CHARGING +1.6%/min | drain -0.9%/min`, or `NOT CHARGING: wrong gear - revs too low, change down`).
+- The road is coloured by grade (amber climbs, blue descents) with signposts where it changes, and the HUD warns you ("CLIMB +15% in 120 m -> change down soon"). Expect to change gear every 10 to 20 seconds; no single gear works for long.
+- If it stalls, hold the clutch to crank it back to life.
+- Stopped on a hill? Hold the clutch, drop to 1st and let go. 1st slips the clutch so it always pulls away, even on the steepest climb; letting it in from high revs dumps the clutch for a short extra shove.
+- The status line always comes first and gives one bit of advice that fits your gear (it never says "change down" in 1st). The HUD look-ahead only adds advice when you're already charging and moving.
+- The first time you open it, a card explains the controls. **?** brings it back.
+
+The top of the tank is hard to fill: charging tapers off above 50% and is slow above 80%. The drain also gets meaner after 02:00. With nobody driving, a full mainframe lasts about four real minutes.
+
+Low power bites:
+
+| Power | |
+| --- | --- |
+| under 50% | The screen dims and flickers |
+| under 30% | **Brownout**: the intern line browns out. Chat still works, but the intern can't run ops or enter keys |
+| under 15% | **Critical**: Bit Rot is offline for everyone |
+| 0% | **Blackout**: the shift is over |
+
+So you're always splitting your attention: a puzzle needs solving, the intern needs your eyes, and the needle keeps dropping. The intern can see the power in `whoami`, and it will nag.
+
+### The story
+
+Things happen during the night: messages from Facilities, files that weren't there an hour ago, a generator that has opinions about 03:40, and a colleague called #0117 who payroll says doesn't work here any more. There are more sectors to recover after PAYROLL.DAT and BADGE.DB, and the intern's clearance keeps going up. No spoilers here: read the logs.
+
+### End of shift
+
+At 06:00 (or at a blackout) the shift ends on a summary screen: sectors recovered, power, kilometres driven, stalls and whether you used the intern (a real agent, the scripted one, or nobody). **Clock in for another shift** starts a fresh game. A finished shift is never left as a save you can't play.
+
+### Bit Rot legend
+
+Each puzzle window has a legend: **green** squares are lit and correct, **amber** squares are lit but should be off, and a **dashed amber outline** is a square that should be lit but isn't.
 
 ## Connect your intern
 
@@ -116,24 +164,26 @@ Then say something like *"You're the intern in NIGHT_SHIFT.EXE. Clock in and hel
 
 ### 3. Dial in from the game
 
-Open **INTERN.EXE** (desktop, Start menu or the `INTERN:` tray button), check the address (`ws://localhost:7117`) and click **Dial**. The tray shows `INTERN: ONLINE` when the agent is on the line. Locally you can also load `http://localhost:8080/?intern=ws://localhost:7117`. The game remembers the address and redials after reloads.
+Open **INTERN.EXE** (desktop, Start menu or the `INTERN:` tray button), check the address (`ws://localhost:7117`) and click **Dial**. The tray shows `INTERN: ONLINE` when the agent is on the line. Locally you can also load `http://localhost:8080/?intern=ws://localhost:7117`. The game remembers the address and quietly redials it whenever the game loads (a few tries with backoff). If nothing answers, the scripted intern stays on duty.
+
+Only one game window can hold the line. If you open the game in a second tab, that tab takes the line and the first one shows **LINE TAKEN BY ANOTHER TERMINAL** in INTERN.EXE and the tray, with a **Redial** button to take it back.
 
 ### What the intern can do
 
 | Tool | |
 | --- | --- |
-| `whoami` | Badge, clearance and allowed ops |
+| `whoami` | Badge, clearance, allowed ops, the clock and mainframe power |
 | `list_files`, `read_file` | The whole drive, including hidden SYSTEM files, subject to clearance |
 | `read_logs` | The system event log (never shown on your screen) |
 | `inspect_puzzle` | A sector's value in hex/binary and its ops. **Never the target.** Keyed masks are redacted. |
 | `shift_left`, `shift_right`, `xor`, `enter_key` | Apply ops (costs your moves) or enter an override key |
 | `message_player`, `read_messages`, `wait_for_player` | Talk to you through INTERN.EXE |
 
-There is deliberately no "dispatch anything" tool. The intern can't undo, reset, rename, open windows or load a save. Clearance starts at **PROBATION** (shifts only) and is raised to **OPERATOR** (XOR and restricted SYSTEM files) when PAYROLL.DAT is recovered.
+There is deliberately no "dispatch anything" tool. The intern can't undo, reset, rename, open windows or load a save. Clearance starts at **PROBATION** (shifts only), goes up to **OPERATOR** (XOR and restricted SYSTEM files) when PAYROLL.DAT is recovered, and to **SUPERVISOR** (sealed files) later in the night. During a brownout the intern can still chat, but ops and keys are refused. The intern can never drive the generator.
 
 ### No agent? No worries
 
-With nothing connected, INTERN.EXE runs a scripted intern. It's keen, useless and easily distracted, but if you keep asking the right question it will eventually, grudgingly, cough up what you need. Short follow-ups ("please", "go on", "?") keep the current thread going. Read it a Bit Rot row as 1s and 0s ("the target is 0000 1111 1111 0000") and it will work out a route from wherever the sector is now. Override keys are always hex, so the key box takes `0x0117`, `0117` or "zero, one, one, seven". The game is completable without an agent.
+With nothing connected, INTERN.EXE runs a scripted intern. It's keen, useless and easily distracted (and it moans when the power is low), but if you keep asking the right question it will eventually, grudgingly, cough up what you need. Short follow-ups ("please", "go on", "?") keep the current thread going. Read it a Bit Rot row as 1s and 0s ("the target is 0000 1111 1111 0000") and it will work out a route from wherever the sector is now. Override keys are always hex, so the key box takes `0x0117`, `0117` or "zero, one, one, seven". The game is completable without an agent.
 
 ### Playing on itch.io (https) with a local intern
 
@@ -158,7 +208,10 @@ game/
   data/
     files.json        the fake file system (8.3 names, locked files, rename unlocks)
     puzzles.json      Bit Rot puzzles: start, target, moveLimit, ops (keyed, playerHides, onSolve)
-    intern.json       the scripted fallback intern's lines
+    intern.json       the scripted fallback intern's lines and power nags
+    story.json        the night's story beats
+    night.json        clock speed and mainframe power (drain, thresholds)
+    gearbox.json      Gear Grind: gears, torque curves, the road
   src/
     core/             single serialisable state + dispatch(action)
       actions.js      action types and creators (the public API, and future MCP tools)
@@ -167,9 +220,15 @@ game/
       initialState.js builds state from the JSON data
       selectors.js    pure read helpers
       permissions.js  intern clearance levels (shared by reducer, bridge and MCP server)
-    logic/            pure 16-bit ops, the puzzle engine (BFS solver, validation), hex in words
+      power.js        mainframe power: drain, charge, brownout and friends
+      story.js        the story beat engine
+      shift.js        end of shift and the summary
+      save.js         save migration (never a dead save)
+    logic/            pure 16-bit ops, the puzzle engine (BFS solver, validation), hex in words,
+                      gearbox.js (the Gear Grind sim: step(sim, input, dt))
     intern/           the scripted fallback intern
-    ui/               DOM rendering: boot, desktop, windows, explorer, viewer, bitrot, intern, taskbar
+    ui/               DOM rendering: boot, desktop, windows, explorer, viewer, bitrot, intern,
+                      geargrind (canvas + Web Audio), taskbar, shiftend
     bridge/api.js     window.NIGHT_SHIFT + the ws:// intern bridge (allowlist, reconnect)
     main.js           wires store to UI; timers and saving live here, not in the reducer
   tests/              node:test suites
@@ -198,7 +257,28 @@ Two-sided puzzles use a few extras:
 - `"playerHides": ["hex"]` shows the player bit patterns only. The intern never sees targets, so together you have the whole picture.
 - `"onSolve": { "internLevel": 2, "message": "..." }` promotes the intern when the sector is recovered.
 
+- `"onSolve": { "drainScale": 0.6 }` makes the mainframe drain slower from then on.
+
 The data test checks that keyed puzzles can't be solved without their key and that the key is written down in a hidden file.
+
+### Adding a story beat
+
+Add a beat to `game/data/story.json`:
+
+```json
+{ "id": "my-beat", "at": "01:30", "when": { "solved": ["payroll"] }, "effects": [{ "do": "post", "from": "system", "text": "..." }] }
+```
+
+- `at` is a clock time between 22:00 and 06:00. `when` conditions (all must hold): `solved`, `unsolved`, `flag`, `notFlag`, `unlocked`, `locked`, `powerBelow`, `level`, `fired`, `notFired`. A beat needs at least one of `at` or `when`.
+- Effects: `post` (from `system` or `ghost`), `log`, `alert`, `reveal` (a `"dormant": true` file), `flag`, `internLevel`, `drain`, `stall`.
+- Each beat fires once per shift. Files marked `"dormant": true` in `files.json` don't exist for anyone (player or intern) until a beat reveals them, and the data test fails if one never is.
+- The full reference is at the top of `game/src/core/story.js`.
+
+### Tuning Gear Grind
+
+`game/data/gearbox.json` holds the idle, lug, redline and blow-up revs, each gear's ratio (km/h per 1000 rpm) and torque table, the road profile, the CHARGE ZONE (`sweetBand`), the 1st-gear `launchRpm` (where the clutch slips when pulling away) and the `dumpTorque`/`dumpSeconds` clutch-dump shove, the `chargeCurve` (rpm to 0..1) and the charge rate. `game/data/night.json` holds the drain, the `drainCurve` (minutes into the shift to a drain multiplier) and the `chargeTaper` (power level to a charge multiplier). The sim is pure (`step(sim, input, dt)`) and runs at a fixed 60 Hz step.
+
+`node scripts/balance.js` plays a whole night with scripted drivers (nobody, each gear held all night, and a driver that shifts on the revs) and prints how the power fares. `game/tests/balance.test.js` holds the line: no single gear can keep the mainframe above 70%, and the rev-shifter keeps the lights on all night. HUD and status text is drawn into a fixed 500x200 canvas (scaled to the window), measured with `measureText` and word-wrapped; `game/tests/gearstatus.test.js` also holds every status, look-ahead and flash string to a character budget (`HUD_CHARS`, `STATUS_CHARS`, `OVERLAY_CHARS` in `logic/gearStatus.js`). `game/tests/gearbox.test.js` checks that 1st pulls away from a standstill on the steepest grade on the road plus 3% and that a stall on that climb can be recovered.
 
 ### The MCP seam
 
@@ -212,7 +292,7 @@ All game state is one JSON object and every change is a `dispatch(action)`. The 
 
 1. **Week 1:** OS shell + first Bit Rot puzzle *(done: playable slice in `game/`)*
 2. **Week 2:** MCP bridge, two-way play working *(done: `night-shift-mcp`, INTERN.EXE, clearance, BADGE.DB)*
-3. **Week 3:** Gear Grind power mechanic + story arc
+3. **Week 3:** Gear Grind power mechanic + story arc *(done: GEARGR~1.EXE, mainframe power and brownouts, the night's story, SUPERVISOR clearance, end-of-shift screen)*
 4. **Week 4:** audio, polish, blame-game finale
 
 Deadline: 1 December 2026, 13:37 PST.

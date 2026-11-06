@@ -58,6 +58,13 @@
     "content": ["MZ  INTERN.EXE v0.1 - ACME Graduate Program", "Chat client for supervised interns. Do not feed after midnight."]
   },
   {
+    "id": "geargrind",
+    "name": "GEARGR~1.EXE",
+    "type": "app",
+    "app": "geargrind",
+    "content": ["MZ  GEARGRIND.EXE - Generator 2 manual start", "Throttle stuck open since 1994. Mind the clutch."]
+  },
+  {
     "id": "badge",
     "name": "BADGE.DB",
     "type": "data",
@@ -85,7 +92,58 @@
   { "id": "memo1", "name": "MEMO_01.TXT", "parent": "memos", "content": ["TO: ALL STAFF", "RE: Restructure", "", "Effective immediately the night shift will be reduced to one", "sysadmin and one intern. The intern will be trained on the job.", "", "- Head Office, Brisbane"] },
   { "id": "memo2", "name": "MEMO_02.TXT", "parent": "memos", "content": ["TO: NIGHT SYSADMIN", "RE: Mainframe power", "", "The backup generator is a manual gearbox unit. If it stalls,", "the mainframe goes down and takes the payroll run with it.", "Please do not let it stall. Again.", "", "- Facilities (R. Patterson)"] },
   { "id": "memo3", "name": "MEMO_03.TXT", "parent": "memos", "content": ["TO: #0117", "RE: (no subject)", "", "We need to talk about what happened on the 12th.", "Not over email.", "", "- K"] },
-  { "id": "shiftlog", "name": "SHIFTLOG.BAK", "parent": "drive", "locked": true, "renameUnlock": "SHIFTLOG.TXT", "lockedMessage": "SHIFTLOG.BAK is a backup copy and cannot be opened.\n\nThe original SHIFTLOG.TXT seems to be missing.", "content": ["NIGHT SHIFT LOG", "", "12/10/1997 22:00  #0117 on. Generator ok.", "12/10/1997 01:13  Payroll batch modified from terminal NS-02.", "12/10/1997 01:14  #0117: 'that was not me'", "12/10/1997 03:40  Generator stalled. Mainframe down 26 min.", "13/10/1997 06:00  #0117 off.", "", "03/11/1997 22:00  #0117 on.  ??"] },
+  { "id": "shiftlog", "name": "SHIFTLOG.BAK", "parent": "drive", "locked": true, "renameUnlock": "SHIFTLOG.TXT", "lockedMessage": "SHIFTLOG.BAK is a backup copy and cannot be opened.\n\nThe original SHIFTLOG.TXT seems to be missing.", "content": ["NIGHT SHIFT LOG", "", "12/10/1997 22:00  #0117 on. Generator ok.", "12/10/1997 23:15  Generator 2 governor reset to FULL from NS-02. Not by me.", "12/10/1997 01:13  Payroll batch modified from terminal NS-02.", "12/10/1997 01:14  #0117: 'that was not me'", "12/10/1997 03:40  Generator stalled. Mainframe down 26 min.", "12/10/1997 03:41  Somebody kept typing on NS-02 while the mainframe was down.", "13/10/1997 06:00  #0117 off.", "", "TIMECLK.DAT says otherwise. Check it.", "", "03/11/1997 22:00  #0117 on.  ??"] },
+  {
+    "id": "genset",
+    "name": "GENSET.CFG",
+    "parent": "drive",
+    "type": "data",
+    "dormant": true,
+    "locked": true,
+    "puzzleId": "genset",
+    "content": [
+      "[GENERATOR 2]",
+      "GEARBOX=MANUAL",
+      "THROTTLE=STUCK_OPEN    ; since 1994, ask Facilities",
+      "GOVERNOR=0.60          ; was FULL. Reset to FULL 12/10/1997 23:15 from NS-02",
+      "STALL_ALARM=OFF        ; disabled 12/10/1997 03:39 from NS-02",
+      "",
+      "; R. Patterson: whoever keeps touching this from NS-02, stop it."
+    ]
+  },
+  {
+    "id": "timeclk",
+    "name": "TIMECLK.DAT",
+    "parent": "drive",
+    "type": "data",
+    "dormant": true,
+    "locked": true,
+    "puzzleId": "timeclk",
+    "content": [
+      "ACME DATAWORKS - TIME CLOCK - TERMINAL NS-02",
+      "=============================================",
+      "DATE        BADGE  IN     OUT",
+      "----------  -----  -----  -----",
+      "12/10/1997  0117   22:00  06:00",
+      "13/10/1997  0117   22:00  --:--   (terminated 13/10, swipe accepted)",
+      "14/10/1997  0117   22:00  --:--",
+      "   ... every night since ...",
+      "03/11/1997  0118   22:00  --:--",
+      "03/11/1997  0117   22:00  --:--",
+      "",
+      "NOTE: 0117 and 0118 swiped in at the same second, on the same terminal.",
+      "      Terminal NS-02 has one keyboard."
+    ]
+  },
+  {
+    "id": "blame",
+    "name": "BLAME.EXE",
+    "parent": "desktop",
+    "dormant": true,
+    "locked": true,
+    "lockedMessage": "BLAME.EXE is installing... 97%\n\nHead Office audit tool. Estimated completion: 06:00.\n\nSomeone will be held responsible.",
+    "content": ["MZ  BLAME.EXE - Head Office audit tool. Installing."]
+  },
 
   { "id": "system", "name": "SYSTEM", "type": "folder", "parent": "drive", "hidden": true },
   {
@@ -118,6 +176,44 @@
       "                  Operator on record: #0117",
       "",
       "03/11/1997 21:58  NOTE: #0117 is not on the roster. Who is typing?"
+    ]
+  },
+  {
+    "id": "timeaud",
+    "name": "TIMECLK.AUD",
+    "parent": "system",
+    "hidden": true,
+    "dormant": true,
+    "minLevel": 2,
+    "content": [
+      "TIME CLOCK OVERRIDE AUDIT (OPERATOR EYES ONLY)",
+      "",
+      "Swipe records re-sequenced nightly at 22:00 with the clock-off override.",
+      "Override key (hex, four digits, read out per policy):",
+      "  zero, six, zero, zero",
+      "",
+      "Operator on record: #0117. Badge status: TERMINATED.",
+      "The override has run 22 nights in a row."
+    ]
+  },
+  {
+    "id": "sealed",
+    "name": "0117.SEC",
+    "parent": "system",
+    "hidden": true,
+    "minLevel": 3,
+    "content": [
+      "PERSONNEL FILE #0117 - SEALED (SUPERVISOR EYES ONLY)",
+      "",
+      "Role:        Night sysadmin",
+      "Terminated:  13/10/1997 06:00",
+      "Reason:      Generator 2 stall (12/10 03:40) and an unauthorised",
+      "             payroll change (12/10 01:13), both from terminal NS-02.",
+      "Employee statement: 'that was not me'.",
+      "",
+      "Head Office note: the logs only name the terminal, not the person.",
+      "An audit is scheduled for 06:00 on the next shift that runs.",
+      "Somebody's name goes in the report. Pick carefully."
     ]
   },
 

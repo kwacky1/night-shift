@@ -14,14 +14,21 @@ const byTypeThenName = (a, b) =>
 
 // Children in display order. Desktop order follows icon layout (column by column),
 // so Shift+click ranges on the desktop match what the player sees. Hidden (system) files are
-// invisible to the player; only the intern's projection includes them.
+// invisible to the player; only the intern's projection includes them. Dormant files are not on
+// the drive yet for anyone.
 export const childrenOf = (state, folderId, { includeHidden = false } = {}) => {
-  const kids = Object.values(state.files).filter((f) => f.parent === folderId && (includeHidden || !f.hidden));
+  const kids = Object.values(state.files).filter((f) => f.parent === folderId && !f.dormant && (includeHidden || !f.hidden));
   if (folderId === 'desktop') {
     const pos = state.desktop.positions;
     return kids.sort((a, b) => (pos[a.id]?.x ?? 0) - (pos[b.id]?.x ?? 0) || (pos[a.id]?.y ?? 0) - (pos[b.id]?.y ?? 0));
   }
   return kids.sort(byTypeThenName);
+};
+
+// Puzzles whose file is on the drive (not dormant). Story beats reveal the rest.
+export const livePuzzles = (state) => {
+  const live = new Set(Object.values(state.files ?? {}).filter((f) => f.puzzleId && !f.dormant).map((f) => f.puzzleId));
+  return Object.values(state.puzzles ?? {}).filter((p) => live.has(p.id));
 };
 
 export const pathOf = (state, id) => {

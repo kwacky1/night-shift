@@ -30,5 +30,41 @@
       { "type": "xor", "mask": "0xFF00" },
       { "type": "xor", "mask": "0x0117", "keyed": true }
     ]
+  },
+  {
+    "id": "genset",
+    "title": "GENSET.CFG - governor block",
+    "hint": "The governor is pinned wide open. Walk it down and mask it back into shape.",
+    "start": "0x0F00",
+    "target": "0x0F33",
+    "moveLimit": 7,
+    "ops": [
+      { "type": "shl", "n": 1 },
+      { "type": "shr", "n": 2 },
+      { "type": "xor", "mask": "0x0FF0" }
+    ],
+    "onSolve": {
+      "drainScale": 0.6,
+      "message": "Facilities: GENSET.CFG recovered. Generator 2 governor recalibrated, mainframe drain down to 60%. Keep driving though."
+    }
+  },
+  {
+    "id": "timeclk",
+    "title": "TIMECLK.DAT - swipe records",
+    "hint": "The swipe records are scrambled. The audit trail has the override key. You do not.",
+    "start": "0x0117",
+    "target": "0x0718",
+    "moveLimit": 6,
+    "playerHides": ["hex"],
+    "ops": [
+      { "type": "shl", "n": 4 },
+      { "type": "shr", "n": 4 },
+      { "type": "xor", "mask": "0x00F0" },
+      { "type": "xor", "mask": "0x0600", "keyed": true }
+    ],
+    "onSolve": {
+      "internLevel": 3,
+      "message": "Head Office: time clock reconciled. Intern #0118 promoted to SUPERVISOR (SEALED files). Supervisor on record: #0117."
+    }
   }
 ]

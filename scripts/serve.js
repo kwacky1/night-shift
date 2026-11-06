@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(fileURLToPath(new URL('../game/', import.meta.url)));
 const port = Number(process.env.PORT) || 8080;
+// no-store on everything, so a plain refresh always picks up edited ES modules.
+const noStore = { 'Cache-Control': 'no-store' };
 const types = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -20,14 +22,14 @@ createServer(async (req, res) => {
   const urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   const filePath = normalize(join(root, urlPath.endsWith('/') ? urlPath + 'index.html' : urlPath));
   if (!filePath.startsWith(root)) {
-    res.writeHead(403).end('Forbidden');
+    res.writeHead(403, noStore).end('Forbidden');
     return;
   }
   try {
     const body = await readFile(filePath);
-    res.writeHead(200, { 'Content-Type': types[extname(filePath)] ?? 'application/octet-stream' });
+    res.writeHead(200, { ...noStore, 'Content-Type': types[extname(filePath)] ?? 'application/octet-stream' });
     res.end(body);
   } catch {
-    res.writeHead(404).end('Not found');
+    res.writeHead(404, noStore).end('Not found');
   }
 }).listen(port, () => console.log(`NIGHT_SHIFT.EXE running at http://localhost:${port}/`));

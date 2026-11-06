@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { fallbackReply, topicFor, validateScript, describedValues, planInWords, routeFrom } from '../src/intern/fallback.js';
+import { fallbackReply, fallbackNag, topicFor, validateScript, describedValues, planInWords, routeFrom } from '../src/intern/fallback.js';
 import { hexInWords } from '../src/logic/words.js';
 import { reducer } from '../src/core/reducer.js';
 import { actions } from '../src/core/actions.js';
@@ -222,4 +222,111 @@ test('validateScript is strict', () => {
   assert.match(broken((s) => (topic(s, 'pattern').roles.target.weak = ['Need'])).join(), /lowercase/);
   assert.match(broken((s) => (topic(s, 'hello').thread = true)).join(), /thread may only be false/);
   assert.match(broken((s) => (s.followUps = [1])).join(), /followUps/);
+});
+
+// ---- week 3: new sectors, power and nags ----------------------------------------------------
+
+const story = await load('story.json');
+const night = await load('night.json');
+const full = { ...data, story, night: { ...night, power: { ...night.power, drainPerMinute: 0 } } };
+const fullDesktop = () => [actions.bootComplete(), actions.clockIn()].reduce(reducer, createInitialState(full));
+const reveal = (s, ...ids) => ({ ...s, files: Object.fromEntries(Object.entries(s.files).map(([id, f]) => [id, ids.includes(id) ? { ...f, dormant: false } : f])) });
+const withPower = (s, level) => ({ ...s, power: { ...s.power, level } });
+
+test('shipped script references real files and nags properly', () => {
+  assert.deepEqual(validateScript(script, { puzzleIds: data.puzzles.map((p) => p.id), fileIds: data.files.map((f) => f.id) }), []);
+  assert.ok(script.nag.lines.length && script.nag.brownoutLines.length);
+});
+
+test('sector topics stay quiet until their file is on the drive', () => {
+  const s = fullDesktop();
+  assert.notEqual(topicFor(script, 'what about genset.cfg?', s).id, 'genset');
+  assert.notEqual(topicFor(script, 'timeclk key?', s).id, 'timekey');
+  assert.notEqual(topicFor(script, 'what is blame.exe', s).id, 'blame');
+  const later = reveal(s, 'genset', 'timeclk', 'timeaud', 'blame');
+  assert.equal(topicFor(script, 'what about genset.cfg?', later).id, 'genset');
+  assert.equal(topicFor(script, 'timeclk.dat', later).id, 'timekey');
+  assert.equal(topicFor(script, 'what is blame.exe', later).id, 'blame');
+});
+
+test('"the key" means the key for the sector in front of the player', () => {
+  let s = reveal({ ...fullDesktop(), intern: { ...fullDesktop().intern, level: 2 } }, 'timeclk', 'timeaud');
+  assert.equal(topicFor(script, 'what is the key?', s).id, 'key', 'BADGE.DB is still the obvious one');
+  s = reducer(s, actions.openFile('timeclk'));
+  assert.equal(topicFor(script, 'what is the key?', s).id, 'timekey', 'TIMECLK.DAT is focused');
+  const solvedBadge = withPuzzle(reveal(fullDesktop(), 'timeclk', 'timeaud'), 'badge', { solved: true });
+  assert.equal(topicFor(script, 'key please', solvedBadge).id, 'timekey', 'badge done, the time clock is next');
+});
+
+test('the time clock override leaks at OPERATOR after pestering, never on probation', () => {
+  const words = hexInWords(0x0600);
+  assert.equal(words, 'zero, six, zero, zero');
+  let probation = reveal(fullDesktop(), 'timeclk', 'timeaud');
+  probation = withPuzzle(probation, 'badge', { solved: true });
+  const locked = conversation(probation, Array(5).fill('timeclk key?'));
+  for (const r of locked.replies) assert.doesNotMatch(r, /zero, six/);
+  const operator = { ...probation, intern: { ...probation.intern, level: 2 } };
+  const { replies } = conversation(operator, ['timeclk key?', 'go on', 'please', 'again']);
+  assert.ok(!replies[0].includes(words));
+  assert.ok(replies[3].includes(words), replies[3]);
+});
+
+test('the sealed file needs SUPERVISOR, and SHIFTLOG.BAK gets a rename hint', () => {
+  const s = fullDesktop();
+  assert.match(fallbackReply(s, "what's in 0117.sec?", script).text, /SUPERVISOR only/);
+  assert.match(fallbackReply({ ...s, intern: { ...s.intern, level: 3 } }, "what's in 0117.sec?", script).text, /Personnel file/);
+  const { replies } = conversation(s, ['shiftlog.bak?', 'and?', 'go on']);
+  assert.match(replies[2], /F2/);
+});
+
+test('the power topic quotes the level and gets twitchy when it is low', () => {
+  const s = fullDesktop();
+  assert.match(fallbackReply(withPower(s, 80), 'how do I drive the generator?', script).text, /80%/);
+  assert.match(fallbackReply(withPower(s, 22.4), 'power?', script).text, /22%/);
+  assert.equal(fallbackReply(withPower(s, 22.4), 'power?', script).topic, 'power:low');
+});
+
+test('genset tips route through the BFS like any other sector', () => {
+  const s = reveal(fullDesktop(), 'genset');
+  const r = fallbackReply(s, 'the target is 0000 1111 0011 0011', script);
+  assert.equal(r.heardTarget, 'genset');
+  assert.match(r.text, /Neat/);
+  assert.match(fallbackReply(withPuzzle(s, 'genset', { solved: true }), 'genset?', script).text, /thriftier/);
+});
+
+test('fallbackNag moans when power drops, gets worse, and periodically while low', () => {
+  const s = fullDesktop();
+  assert.equal(fallbackNag(withPower(s, 60), withPower(s, 50), script), null, 'fine above nagBelow');
+  const crossed = fallbackNag(withPower(s, 40.2), withPower(s, 39.6), script);
+  assert.match(crossed.text, /40%/);
+  assert.equal(crossed.topic, 'nag');
+  assert.equal(fallbackNag(withPower(s, 39.6), withPower(s, 39), script), null, 'no repeat for small drops');
+  const brownout = fallbackNag(withPower(s, 30.1), withPower(s, 29.9), script);
+  assert.equal(brownout.topic, 'nag:brownout');
+  const prev = { ...withPower(s, 35), clock: { ...s.clock, elapsed: 59 } };
+  const next = { ...withPower(s, 34.5), clock: { ...s.clock, elapsed: 60 } };
+  assert.ok(fallbackNag(prev, next, script), 'every 30 game minutes while low');
+  assert.equal(fallbackNag(withPower(s, 1), withPower(s, 0), script), null, 'blackout is not a nag');
+  assert.equal(fallbackNag(withPower(s, 45), { ...withPower(s, 35), phase: 'over' }, script), null);
+});
+
+test('validateScript checks the new fields', () => {
+  const broken = (mutate) => {
+    const s = JSON.parse(JSON.stringify(script));
+    mutate(s);
+    return validateScript(s, { puzzleIds: data.puzzles.map((p) => p.id), fileIds: ['timeclk', 'genset'] }).join();
+  };
+  const topic = (s, id) => s.topics.find((t) => t.id === id);
+  assert.match(broken((s) => delete topic(s, 'genset').file), /needs a file/);
+  assert.match(broken((s) => (topic(s, 'blame').file = 'blame')), /unknown file blame/);
+  assert.match(broken((s) => (topic(s, 'who').file = 'genset')), /only used with when/);
+  assert.match(broken((s) => (s.nag.everyMinutes = 0)), /everyMinutes/);
+  assert.match(broken((s) => s.nag.lines.push('{{key}}')), /nag: placeholder/);
+  assert.match(broken((s) => (s.nag.colour = 'red')), /nag: unknown field/);
+});
+
+test('power questions are about power even with a sector in front of the player', () => {
+  const s = reducer(unlocked(), actions.openFile('badge'));
+  assert.equal(topicFor(script, 'how do I keep the power up?', s).id, 'power');
+  assert.equal(topicFor(script, 'how do I do this', s).id, 'solve');
 });
