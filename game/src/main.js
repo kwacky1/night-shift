@@ -19,7 +19,8 @@ import { renderShiftEnd } from './ui/shiftend.js';
 import { geargrindView } from './ui/geargrind.js';
 import { powerStatus } from './core/power.js';
 import { connectIntern, exposeApi, isLocalSocketUrl } from './bridge/api.js';
-import { fallbackNag, fallbackReply } from './intern/fallback.js';
+import { fallbackAsk, fallbackNag, fallbackReply } from './intern/fallback.js';
+import { opLabel } from './logic/puzzle.js';
 import { unreadForPlayer } from './core/selectors.js';
 
 const SAVE_KEY = 'night-shift:save';
@@ -135,6 +136,27 @@ const boot = async () => {
         }
         localStorage.setItem(INTERN_URL_KEY, url);
       },
+      // The sysadmin pressed a remote-only op. A real intern gets asked on the line; the scripted
+      // one runs it itself (counted as scriptedOps, not AI help) after a grumble.
+      ask: (puzzleId, opIndex) => {
+        const state = store.getState();
+        const op = state.puzzles[puzzleId]?.ops[opIndex];
+        if (!op || state.phase !== 'desktop') return;
+        if (ui.internStatus === 'online' || ui.internStatus === 'taken') {
+          const where = Object.values(state.files).find((f) => f.puzzleId === puzzleId)?.name ?? puzzleId;
+          store.dispatch(actions.chatSend(`#0118, can you run ${opLabel(op)} on ${where}? It's on your side of the line.`));
+          return;
+        }
+        ui.internTyping = true;
+        ctx.rerender();
+        setTimeout(() => {
+          ui.internTyping = false;
+          const { text, apply } = fallbackAsk(store.getState(), puzzleId, opIndex, internScript);
+          store.dispatch(actions.chatSend(text, 'intern', { topic: 'ask', scripted: true }));
+          if (apply) store.dispatch({ ...actions.applyOp(puzzleId, opIndex), actor: 'intern', scripted: true });
+          else ctx.rerender();
+        }, 600 + Math.random() * 600);
+      },
       hangUp: () => {
         bridge?.close();
         bridge = null;
@@ -215,7 +237,7 @@ const boot = async () => {
     }
     if (state.phase !== 'desktop' || e.target.closest?.('input, textarea')) return;
     const focused = state.windows.find((w) => w.id === state.focusedWindowId);
-    if (focused?.kind === 'bitrot' && !e.ctrlKey && !e.altKey && !e.metaKey && bitrotKey(e, state, focused, store.dispatch)) {
+    if (focused?.kind === 'bitrot' && !e.ctrlKey && !e.altKey && !e.metaKey && bitrotKey(e, state, focused, store.dispatch, ctx)) {
       e.preventDefault();
       return;
     }

@@ -7,12 +7,14 @@ import { canActorUseOp, canInternUseOp, internActionError, internOpsLeft, levelI
 import { reducer } from '../src/core/reducer.js';
 import { actions } from '../src/core/actions.js';
 import { createInitialState } from '../src/core/initialState.js';
+import { fallbackAsk, validateScript } from '../src/intern/fallback.js';
 
 const load = async (name) => JSON.parse(await readFile(new URL(`../data/${name}`, import.meta.url), 'utf8'));
 const files = await load('files.json');
 const puzzles = await load('puzzles.json');
 const night = await load('night.json');
 const story = await load('story.json');
+const script = await load('intern.json');
 const data = { files, puzzles, night: { ...night, power: { ...night.power, drainPerMinute: 0 } }, story };
 
 // The intern's clearance when each sector is meant to be tackled.
@@ -126,4 +128,16 @@ test('OPERATOR clearance is still needed for XOR', () => {
   const s = atLevel(desktop(), 1);
   assert.equal(canInternUseOp(1, 'xor'), false);
   assert.match(internActionError(s, asIntern(actions.applyOp('badge', 2))), /cannot use XOR|No such/);
+});
+
+test('the scripted intern runs remote-only ops when asked, and explains when it cannot', () => {
+  assert.deepEqual(validateScript(script).filter((e) => e.startsWith('ask')), []);
+  const s = desktop();
+  const ok = fallbackAsk(s, 'payroll', 1, script);
+  assert.equal(ok.apply, true);
+  assert.match(ok.text, />> 3/);
+  const genset = fallbackAsk(s, 'genset', 2, script);
+  assert.equal(genset.apply, false);
+  assert.match(genset.text, /PROBATION interns cannot use XOR|No such/);
+  assert.match(validateScript({ ...script, ask: { okLines: ['x {{key}}'], refusedLines: ['no'] } }).join('\n'), /placeholder \{\{key\}\}[\s\S]*reason/);
 });

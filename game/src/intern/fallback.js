@@ -12,12 +12,12 @@
 // several topics the one about the sector the player is looking at wins.
 //
 // fallbackNag(prev, next, script) is the unprompted bit: it moans about mainframe power.
-import { internLevel, isOpUnlocked } from '../core/permissions.js';
+import { internActionError, internLevel, isOpUnlocked } from '../core/permissions.js';
 import { livePuzzles } from '../core/selectors.js';
 import { POWER_STATUSES, powerConfig, powerLevel, powerStatus } from '../core/power.js';
 import { hexInWords } from '../logic/words.js';
 import { toHex, toWord } from '../logic/bits.js';
-import { solve } from '../logic/puzzle.js';
+import { opLabel, solve } from '../logic/puzzle.js';
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -300,6 +300,23 @@ export const fallbackNag = (prev, next, script) => {
   return { text: fill(pick(nag[kind], next.intern?.pester?.[key] ?? 0, true), next, {}), topic: key };
 };
 
+// ---- remote-only ops -----------------------------------------------------------------------
+
+// The sysadmin pressed an op only the intern's line can run. The scripted intern does it if it's
+// allowed (apply: true) and grumbles either way. Returns { text, apply }.
+export const fallbackAsk = (state, puzzleId, opIndex, script) => {
+  const ask = script.ask ?? {};
+  const p = state.puzzles?.[puzzleId];
+  const op = p?.ops[opIndex];
+  if (!op) return { text: 'Ask me what?', apply: false };
+  const denied = internActionError(state, { type: 'PUZZLE_APPLY_OP', puzzleId, opIndex, actor: 'intern' });
+  const count = state.stats?.scriptedOps ?? 0;
+  const vars = { op: opLabel(op), reason: denied ?? '' };
+  const lines = denied ? ask.refusedLines : ask.okLines;
+  if (!lines?.length) return { text: denied ?? `Running ${vars.op}.`, apply: !denied };
+  return { text: fillPattern(pick(lines, count, true), vars), apply: !denied };
+};
+
 // ---- validation ---------------------------------------------------------------------------
 
 const TOPIC_FIELDS = new Set(['id', 'keywords', 'lines', 'cycle', 'thread', 'requiresLevel', 'lockedLines', 'leaks', 'doneLine', 'unlockedLine', 'when', 'puzzle', 'file', 'stuckLines', 'lowLines', 'detect', 'roles', 'currentLines', 'currentWrongLines', 'wrongLines', 'unknownLines', 'doneLines']);
@@ -315,6 +332,12 @@ export const validateScript = (script, { puzzleIds, fileIds } = {}) => {
   const errors = [];
   if (!Array.isArray(script?.topics)) return ['topics must be an array'];
   if (script.followUps !== undefined && !isWords(script.followUps)) errors.push('followUps must be lowercase strings');
+  if (script.ask !== undefined) {
+    for (const k of Object.keys(script.ask)) if (!['okLines', 'refusedLines'].includes(k)) errors.push(`ask: unknown field ${k}`);
+    if (!isLines(script.ask.okLines) || !isLines(script.ask.refusedLines)) errors.push('ask: needs okLines and refusedLines');
+    for (const v of placeholders([...(script.ask.okLines ?? []), ...(script.ask.refusedLines ?? [])])) if (!['op', 'reason'].includes(v)) errors.push(`ask: placeholder {{${v}}} not allowed here`);
+    if (!(script.ask.refusedLines ?? []).every((l) => l.includes('{{reason}}'))) errors.push('ask: refusedLines must give the {{reason}}');
+  }
   if (script.nag !== undefined) {
     for (const k of Object.keys(script.nag)) if (!['lines', 'brownoutLines', 'everyMinutes'].includes(k)) errors.push(`nag: unknown field ${k}`);
     if (!isLines(script.nag.lines)) errors.push('nag: needs lines');

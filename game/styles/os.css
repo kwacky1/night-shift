@@ -299,6 +299,15 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
 .ops { display: flex; flex-wrap: wrap; gap: 6px; }
 .ops button { font-family: var(--mono); min-width: 96px; }
 .ops kbd { color: var(--lo); font-size: 10px; margin-left: 4px; }
+.ops small { display: block; font-size: 9px; letter-spacing: 1px; color: #555; }
+.ops button.hands-intern { border-style: dashed; }
+.ops button.hands-intern small { color: #06c; }
+.ops button.hands-player small { color: #840; }
+.moves .remote { margin-left: auto; color: #6af; }
+.bitrot .banner.noop { display: none; background: var(--amber); color: #000; }
+.bitrot.noop .banner.noop { display: block; }
+.bitrot.noop .bits:not(.target) { animation: noop-flash 0.3s steps(1) 3; }
+@keyframes noop-flash { 50% { opacity: 0.25; } }
 .moves { display: flex; align-items: center; gap: 8px; }
 .pips { display: flex; gap: 3px; }
 .pips span { width: 12px; height: 12px; border: 1px solid #2c8a48; }
@@ -525,4 +534,5 @@ body.surge #desktop { animation: surge 0.9s steps(6); }
 }
 @media (prefers-reduced-motion: reduce) {
   body[data-power] #desktop, body.surge #desktop { animation: none; }
+  .bitrot.noop .bits:not(.target) { animation: none; outline: 2px solid var(--amber); }
 }
