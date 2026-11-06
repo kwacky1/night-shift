@@ -27,7 +27,12 @@ test('intern bridge only accepts local socket URLs', () => {
 });
 
 test('only a short allowlist of actions can be sent remotely', () => {
-  assert.deepEqual([...REMOTE_ACTION_TYPES].sort(), ['CHAT_SEND', 'PUZZLE_APPLY_OP', 'PUZZLE_ENTER_KEY']);
+  assert.deepEqual([...REMOTE_ACTION_TYPES].sort(), ['BLAME_SUBMIT', 'CHAT_SEND', 'PUZZLE_APPLY_OP', 'PUZZLE_ENTER_KEY']);
+  const blame = sanitiseRemoteAction({ type: 'BLAME_SUBMIT', suspect: '0117', evidence: ['readme:1'], statement: 'hi', scripted: true, actor: 'player' });
+  assert.deepEqual(blame, { type: 'BLAME_SUBMIT', suspect: '0117', evidence: ['readme:1'], statement: 'hi', actor: 'intern' });
+  for (const bad of [{ suspect: '../x' }, { suspect: 'a', evidence: 'readme:1' }, { suspect: 'a', evidence: ['readme'] }, { suspect: 'a', statement: 5 }]) {
+    assert.throws(() => sanitiseRemoteAction({ type: 'BLAME_SUBMIT', ...bad }), /Bad BLAME_SUBMIT/);
+  }
   for (const type of ['HYDRATE', 'OPEN_FILE', 'RENAME_FILE', 'PUZZLE_RESET', 'PUZZLE_UNDO', 'TICK', 'CLOCK_IN', 'constructor', '__proto__', 'toString']) {
     assert.throws(() => sanitiseRemoteAction({ type }), /not allowed remotely/, type);
   }

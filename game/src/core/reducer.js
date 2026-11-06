@@ -8,6 +8,7 @@ import { parseKey } from '../logic/words.js';
 import { canActorUseOp, clampLevel, internActionError, internLevel, isOpUnlocked, levelInfo } from './permissions.js';
 import { chargePower, drainForMinutes, drainRate, isBitrotPowered } from './power.js';
 import { endShift } from './shift.js';
+import { auditDue, checkSubmission, decideBlame, suspectName } from './blame.js';
 import { advanceStory, STORY_TRIGGERS } from './story.js';
 
 const LOG_LIMIT = 100;
@@ -19,6 +20,7 @@ const WINDOW_SIZES = {
   bitrot: { w: 500, h: 420 },
   intern: { w: 380, h: 420, x: 680, y: 40 },
   geargrind: { w: 540, h: 415, x: 60, y: 40 },
+  blame: { w: 620, h: 470, x: 120, y: 30 },
 };
 
 // 8.3 filenames, DOS style. Stored upper case.
@@ -81,6 +83,7 @@ const openFile = (state, id) => {
   if (!file) return state;
   if (file.hidden || file.dormant) return alert(state, 'Open', `Cannot find '${id}'. Make sure the path and file name are correct.`);
   if (file.type === 'folder') return openWindow(state, 'explorer', id);
+  if (file.type === 'app' && file.locked) return alert(state, file.name, file.lockedMessage ?? `${file.name} cannot be opened.`);
   if (file.type === 'app' && file.app && WINDOW_SIZES[file.app]) return openWindow(state, file.app, id);
   if (file.locked && file.puzzleId && state.puzzles[file.puzzleId]) {
     const s = openWindow(state, 'bitrot', id);
@@ -129,6 +132,34 @@ const renameFile = (state, { id, name }) => {
     s = log(updateFile(s, id, { locked: false }), `${newName} restored.`);
   }
   return s;
+};
+
+// 06:00 with BLAME.EXE on the desktop: the clock stops, NS-02 freezes and the audit opens.
+const startAudit = (state) => {
+  const fileId = state.blame.config.file ?? 'blame';
+  let s = { ...state, blame: { ...state.blame, open: true }, alert: null };
+  s = updateFile(s, fileId, { locked: false });
+  s = log(s, 'Head Office audit. NS-02 frozen. BLAME.EXE running.');
+  s = post(s, 'system', 'Head Office: 06:00. NS-02 is frozen for the audit. BLAME.EXE is open. The sysadmin and #0118 each file one statement: who did it, the file:line evidence, and why.');
+  return openFile(s, fileId);
+};
+
+const SIDE_NAMES = { player: 'The sysadmin', intern: '#0118' };
+
+const blameSubmit = (state, action) => {
+  const side = action.actor === 'intern' ? 'intern' : 'player';
+  if (side === 'intern' && !action.scripted && internActionError(state, action)) return state;
+  const { submission, error } = checkSubmission(state, side, action);
+  if (error) return side === 'player' ? alert(state, 'BLAME.EXE', error) : state;
+  const filed = { ...submission, ...(action.scripted ? { scripted: true } : {}), at: formatClock(clockMinutes(state)) };
+  let s = { ...state, blame: { ...state.blame, [side]: filed } };
+  s = log(s, `${SIDE_NAMES[side]} filed a statement with Head Office.`);
+  s = post(s, 'system', `BLAME.EXE: ${SIDE_NAMES[side]} has filed a statement.`);
+  if (!s.blame.player || !s.blame.intern) return s;
+  const result = decideBlame(s);
+  s = { ...s, blame: { ...s.blame, result } };
+  s = log(s, `Audit verdict: ${result.suspect ? suspectName(s.blame.config, result.suspect) : 'no one'}. ${result.ending.title}.`);
+  return endShift(s, 'audit', { ending: result.ending });
 };
 
 const bumpStat = (state, key, by = 1) => ({ ...state, stats: { ...state.stats, [key]: (state.stats?.[key] ?? 0) + by } });
@@ -268,7 +299,7 @@ const baseReducer = (state, action) => {
         : state;
 
     case T.TICK: {
-      if (state.phase !== 'desktop') return state;
+      if (state.phase !== 'desktop' || state.blame?.open) return state;
       let minutes = Math.min(state.clock.length - state.clock.elapsed, Math.max(0, action.minutes ?? 1));
       // A long tick that runs the mainframe dry stops the clock at the blackout, not at the end.
       const rate = drainRate(state);
@@ -276,7 +307,7 @@ const baseReducer = (state, action) => {
       const elapsed = state.clock.elapsed + minutes;
       let s = drainForMinutes({ ...state, clock: { ...state.clock, elapsed } }, minutes);
       if (s.power.level <= 0) return endShift(s, 'blackout');
-      if (elapsed >= state.clock.length) return endShift(s, 'clock');
+      if (elapsed >= state.clock.length) return auditDue(s) ? startAudit(s) : endShift(s, 'clock');
       return s;
     }
 
@@ -349,6 +380,9 @@ const baseReducer = (state, action) => {
 
     case T.PUZZLE_ENTER_KEY:
       return enterKey(state, action);
+
+    case T.BLAME_SUBMIT:
+      return blameSubmit(state, action);
 
     case T.CHAT_SEND:
       return chatSend(state, action);

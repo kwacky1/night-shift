@@ -7,7 +7,7 @@ import { FILENAME_PATTERN } from '../src/core/reducer.js';
 import { MAX_LEVEL } from '../src/core/permissions.js';
 import { hexInWords } from '../src/logic/words.js';
 
-const APP_KINDS = ['intern', 'geargrind'];
+const APP_KINDS = ['intern', 'geargrind', 'blame'];
 
 const load = async (name) => JSON.parse(await readFile(new URL(`../data/${name}`, import.meta.url), 'utf8'));
 const files = await load('files.json');

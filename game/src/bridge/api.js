@@ -21,6 +21,7 @@
 import { actions, ActionTypes } from '../core/actions.js';
 import * as selectors from '../core/selectors.js';
 import { internActionError } from '../core/permissions.js';
+import { checkSubmission } from '../core/blame.js';
 import { STATE_VERSION } from '../core/initialState.js';
 
 export const PROTOCOL_VERSION = 3;
@@ -55,6 +56,13 @@ const REMOTE_ACTIONS = {
     if (typeof a.text !== 'string' || !a.text.trim()) throw new Error('Bad CHAT_SEND');
     return { type: ActionTypes.CHAT_SEND, from: 'intern', text: a.text.slice(0, 1000) };
   },
+  // The reducer checks the suspect and every citation against what the intern can read.
+  [ActionTypes.BLAME_SUBMIT]: (a) => {
+    const refs = a.evidence ?? [];
+    if (!isId(a.suspect) || !Array.isArray(refs) || refs.length > 8 || !refs.every((r) => typeof r === 'string' && /^[a-z0-9_-]{1,32}:\d{1,4}$/i.test(r))) throw new Error('Bad BLAME_SUBMIT');
+    if (a.statement !== undefined && (typeof a.statement !== 'string' || a.statement.length > 500)) throw new Error('Bad BLAME_SUBMIT');
+    return { type: ActionTypes.BLAME_SUBMIT, suspect: a.suspect, evidence: [...refs], statement: a.statement ?? '' };
+  },
 };
 
 export const REMOTE_ACTION_TYPES = Object.freeze(Object.keys(REMOTE_ACTIONS));
@@ -80,7 +88,7 @@ export const handleBridgeMessage = (store, raw) => {
   if (id === null) return null;
   try {
     const action = sanitiseRemoteAction(msg.action);
-    const denied = internActionError(store.getState(), action);
+    const denied = internActionError(store.getState(), action) ?? (action.type === ActionTypes.BLAME_SUBMIT ? checkSubmission(store.getState(), 'intern', action).error : null);
     if (denied) throw new Error(denied);
     store.dispatch(action);
     return { type: 'result', id, ok: true };

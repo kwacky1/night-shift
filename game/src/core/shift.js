@@ -1,7 +1,9 @@
 // End of shift: 06:00 or a blackout. Pure helpers used by the reducer and the save migration.
 import { clockMinutes, formatClock } from './selectors.js';
 
-export const END_REASONS = ['clock', 'blackout'];
+export const END_REASONS = ['clock', 'blackout', 'audit'];
+
+const END_TEXT = { clock: '06:00. Shift over.', blackout: 'BLACKOUT. Mainframe down. Shift over.', audit: 'Audit complete. Shift over.' };
 
 // How the intern was used this shift: a real agent, the scripted fallback, or not at all.
 export const internUsage = (stats) => {
@@ -27,10 +29,11 @@ export const shiftSummary = (state) => {
   };
 };
 
-export const endShift = (state, reason) => {
+// extra: anything to keep with the end (the audit passes its ending).
+export const endShift = (state, reason, extra = {}) => {
   if (state.phase === 'over') return state;
   const at = formatClock(clockMinutes(state));
-  const text = reason === 'blackout' ? 'BLACKOUT. Mainframe down. Shift over.' : '06:00. Shift over.';
+  const text = END_TEXT[reason] ?? END_TEXT.clock;
   const next = {
     ...state,
     phase: 'over',
@@ -38,5 +41,5 @@ export const endShift = (state, reason) => {
     log: [...state.log, { at, text }].slice(-100),
     power: { ...state.power, generator: { ...state.power.generator, running: false, rpm: 0 } },
   };
-  return { ...next, shiftEnd: { reason, at, summary: shiftSummary(next) } };
+  return { ...next, shiftEnd: { reason, at, summary: shiftSummary(next), ...extra } };
 };

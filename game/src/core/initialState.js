@@ -3,6 +3,7 @@
 import { normalisePuzzle } from '../logic/puzzle.js';
 import { START_LEVEL } from './permissions.js';
 import { createPower } from './power.js';
+import { createBlame } from './blame.js';
 
 export const STATE_VERSION = 4;
 export const SHIFT_LENGTH = 8 * 60;
@@ -23,7 +24,7 @@ export const createStats = () => ({ internOps: 0, internKeys: 0, internMessages:
 // op that changed nothing (the board flashes NO CHANGE when its seq goes up).
 export const freshProgress = (def) => ({ value: def.start, history: [], by: [], unlocked: [], solved: false, failed: false, solvedBy: null, noop: null });
 
-export const createInitialState = ({ files = [], puzzles = [], night = {}, story = {} } = {}) => {
+export const createInitialState = ({ files = [], puzzles = [], night = {}, story = {}, blame = null } = {}) => {
   const fileMap = {
     desktop: { id: 'desktop', name: 'DESKTOP', type: 'folder', parent: null, locked: false },
   };
@@ -82,6 +83,8 @@ export const createInitialState = ({ files = [], puzzles = [], night = {}, story
     // Story beats (data/story.json) and which have fired. The intern's projection never sees these.
     story: { beats: structuredClone(story.beats ?? []), fired: [] },
     stats: createStats(),
+    // BLAME.EXE, the 06:00 audit (data/blame.json). The intern's projection never sees the config.
+    blame: createBlame(blame),
     shiftEnd: null,
   };
 };

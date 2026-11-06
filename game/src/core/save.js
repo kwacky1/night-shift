@@ -81,7 +81,7 @@ export const migrateSave = (saved, data) => {
     if (data?.night?.power) s = { ...s, power: { ...s.power, config: createPower(data.night.power).config } };
     const { _over, ...state } = s;
     s = state;
-    if (s.phase === 'desktop' && (_over || s.clock.elapsed >= s.clock.length)) s = endShift(s, 'clock');
+    if (s.phase === 'desktop' && !s.blame?.open && (_over || s.clock.elapsed >= s.clock.length)) s = endShift(s, 'clock');
     else if (s.phase === 'desktop' && s.power.level <= 0) s = endShift(s, 'blackout');
     if (s.phase === 'over' && !s.shiftEnd) s = endShift({ ...s, phase: 'desktop' }, 'clock');
     return s;
