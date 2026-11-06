@@ -17,6 +17,8 @@ import { internView, DEFAULT_INTERN_URL } from './ui/intern.js';
 import { startRename } from './ui/rename.js';
 import { renderShiftEnd } from './ui/shiftend.js';
 import { geargrindView } from './ui/geargrind.js';
+import { blameView } from './ui/blame.js';
+import { addEnding, ENDINGS_KEY, parseEndings, scriptedBlame } from './core/blame.js';
 import { powerStatus } from './core/power.js';
 import { connectIntern, exposeApi, isLocalSocketUrl } from './bridge/api.js';
 import { fallbackAsk, fallbackNag, fallbackReply } from './intern/fallback.js';
@@ -27,6 +29,10 @@ const SAVE_KEY = 'night-shift:save';
 const INTERN_URL_KEY = 'night-shift:intern-url';
 const SAVED_PHASES = ['desktop', 'over'];
 const SAVE_THROTTLE_MS = 500;
+// The scripted intern files its audit statement this long after the sysadmin when nobody's on the
+// line, or this long after 06:00 if an AI intern is on the line but hasn't filed.
+const SCRIPTED_BLAME_MS = 2000;
+const AI_BLAME_GRACE_MS = 90_000;
 
 const loadJson = async (path) => {
   const res = await fetch(new URL(path, import.meta.url));
@@ -44,15 +50,16 @@ const loadSave = (data) => {
 };
 
 const boot = async () => {
-  const [files, puzzles, night, story, internScript, gearbox] = await Promise.all([
+  const [files, puzzles, night, story, internScript, gearbox, blame] = await Promise.all([
     loadJson('../data/files.json'),
     loadJson('../data/puzzles.json'),
     loadJson('../data/night.json'),
     loadJson('../data/story.json'),
     loadJson('../data/intern.json'),
     loadJson('../data/gearbox.json'),
+    loadJson('../data/blame.json'),
   ]);
-  const data = { files, puzzles, night, story };
+  const data = { files, puzzles, night, story, blame };
   const store = createStore(reducer, loadSave(data) ?? createInitialState(data));
 
   const dom = {
@@ -125,6 +132,8 @@ const boot = async () => {
       location.reload();
     },
     newShift: () => store.dispatch(actions.newShift(createInitialState(data))),
+    // Endings found across every shift. Kept apart from the save, so a new game keeps them.
+    endings: () => ({ found: loadEndings(), all: blame.endings.map(({ id, title }) => ({ id, title })) }),
     intern: {
       url: () => bridge?.url ?? savedUrl() ?? DEFAULT_INTERN_URL,
       dial: (url, { quiet = false } = {}) => {
@@ -170,6 +179,7 @@ const boot = async () => {
   registerView('bitrot', bitrotView);
   registerView('intern', internView);
   registerView('geargrind', geargrindView);
+  registerView('blame', blameView);
   initDesktop(dom.icons, dom.marquee, ctx);
   initWindows(dom.windows, ctx);
   initTaskbar(dom.taskbar, dom.startMenu, ctx);
@@ -183,7 +193,10 @@ const boot = async () => {
   };
   window.addEventListener('pagehide', () => saveTimer && saveNow());
   store.subscribe((state, prev, action) => {
+    if (state.phase === 'over' && prev.phase !== 'over' && state.shiftEnd?.ending) saveEnding(state.shiftEnd.ending.id);
+    if (state.blame?.open && !prev.blame?.open) auditOpenedAt = Date.now();
     render(state, prev);
+    scriptedBlameCheck();
     if (action.type === ActionTypes.CHAT_SEND && !action.actor && action.from !== 'intern') scriptedIntern(action.text);
     if (action.type !== ActionTypes.HYDRATE) scriptedNag(state, prev);
     const chatOpen = state.windows.some((w) => w.kind === 'intern' && !w.minimised);
@@ -210,6 +223,41 @@ const boot = async () => {
     }, 700 + Math.random() * 900);
   };
 
+  const loadEndings = () => {
+    try {
+      return parseEndings(localStorage.getItem(ENDINGS_KEY), blame);
+    } catch {
+      return [];
+    }
+  };
+  const saveEnding = (id) => {
+    try {
+      localStorage.setItem(ENDINGS_KEY, JSON.stringify(addEnding(loadEndings(), id)));
+    } catch {
+      // Private mode: the tally just won't persist.
+    }
+  };
+
+  // The audit: if no AI files a statement, the scripted intern does (it blames you, naturally).
+  let auditOpenedAt = store.getState().blame?.open ? Date.now() : 0;
+  let blameTimer = null;
+  const scriptedBlameCheck = () => {
+    const b = store.getState().blame;
+    if (!b?.open || !b.player || b.intern || blameTimer) return;
+    const aiOnLine = ui.internStatus === 'online' || ui.internStatus === 'taken';
+    if (aiOnLine && Date.now() - auditOpenedAt < AI_BLAME_GRACE_MS) return;
+    ui.internTyping = true;
+    ctx.rerender();
+    blameTimer = setTimeout(() => {
+      blameTimer = null;
+      ui.internTyping = false;
+      const s = store.getState();
+      if (!s.blame?.open || s.blame.intern) return ctx.rerender();
+      const pick = scriptedBlame(s);
+      if (pick) store.dispatch({ ...actions.blameSubmit(pick.suspect, pick.evidence, pick.statement), actor: 'intern', scripted: true });
+    }, SCRIPTED_BLAME_MS);
+  };
+
   // Unprompted: the scripted intern nags about mainframe power (a real intern does its own nagging).
   const scriptedNag = (state, prev) => {
     if (ui.internStatus === 'online' || ui.internStatus === 'taken') return;
@@ -222,6 +270,7 @@ const boot = async () => {
   const tickLoop = () => {
     const s = store.getState();
     if (s.phase === 'desktop' && !document.hidden && !s.alert) store.dispatch(actions.tick(1));
+    scriptedBlameCheck();
     setTimeout(tickLoop, minuteMs());
   };
   setTimeout(tickLoop, minuteMs());
