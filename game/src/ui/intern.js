@@ -15,6 +15,7 @@ const statusText = () =>
     online: 'AI intern connected',
     connecting: 'Dialling...',
     taken: 'Line lost to another terminal.',
+    outdated: 'Intern driver out of date. Scripted intern on duty.',
   })[ui.internStatus] ?? 'No agent. Scripted intern on duty.';
 
 export const internView = {
@@ -35,6 +36,12 @@ export const internView = {
           <span>Another NIGHT_SHIFT window dialled the intern and this one was dropped. Nobody is answering here.</span>
           <button type="button" class="redial">Redial</button>
         </div>
+        <div class="driver-old" role="alert" hidden>
+          <b class="driver-text">INTERN DRIVER OUT OF DATE</b>
+          <span>The intern's MCP server is from a different build of the game and can't hear this one. Restart <code>night-shift-mcp</code> from this checkout (your agent usually restarts it for you), then Redial.</span>
+          <button type="button" class="redial">Redial</button>
+        </div>
+        <div class="line-noise" hidden></div>
         <div class="chat sunken" role="log" aria-live="polite"></div>
         <div class="typing" hidden>#0118 is typing...</div>
         <form class="compose">
@@ -46,10 +53,10 @@ export const internView = {
     urlInput.value = ctx.intern.url();
     body.querySelector('.dial').addEventListener('submit', (e) => {
       e.preventDefault();
-      if (ui.internStatus === 'offline' || ui.internStatus === 'taken') ctx.intern.dial(urlInput.value.trim() || DEFAULT_INTERN_URL);
+      if (ui.internStatus === 'offline' || ui.internStatus === 'taken' || ui.internStatus === 'outdated') ctx.intern.dial(urlInput.value.trim() || DEFAULT_INTERN_URL);
       else ctx.intern.hangUp();
     });
-    body.querySelector('.redial').addEventListener('click', () => ctx.intern.dial(urlInput.value.trim() || DEFAULT_INTERN_URL));
+    body.querySelectorAll('.redial').forEach((b) => b.addEventListener('click', () => ctx.intern.dial(urlInput.value.trim() || DEFAULT_INTERN_URL)));
     const compose = body.querySelector('.compose');
     compose.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -64,10 +71,16 @@ export const internView = {
   render(body, state, prev, win) {
     const root = body.querySelector('.intern-app');
     root.dataset.status = ui.internStatus;
-    const idle = ui.internStatus === 'offline' || ui.internStatus === 'taken';
-    body.querySelector('.dial-btn').textContent = { offline: 'Dial', taken: 'Redial' }[ui.internStatus] ?? 'Hang up';
+    const idle = ui.internStatus === 'offline' || ui.internStatus === 'taken' || ui.internStatus === 'outdated';
+    body.querySelector('.dial-btn').textContent = { offline: 'Dial', taken: 'Redial', outdated: 'Redial' }[ui.internStatus] ?? 'Hang up';
     body.querySelector('input[name="url"]').disabled = !idle;
     body.querySelector('.line-taken').hidden = ui.internStatus !== 'taken';
+    const old = body.querySelector('.driver-old');
+    old.hidden = ui.internStatus !== 'outdated';
+    if (!old.hidden) old.querySelector('.driver-text').textContent = ui.internDriver?.text ?? 'INTERN DRIVER OUT OF DATE';
+    const noise = body.querySelector('.line-noise');
+    noise.hidden = !(ui.internStatus === 'online' && ui.internWarning);
+    if (!noise.hidden) noise.textContent = `LINE NOISE: the intern's driver couldn't read the last update (${ui.internWarning}). It may be out of date.`;
     const brownout = isBrownout(state) ? ' | BROWNOUT: ops and keys blocked' : '';
     body.querySelector('.status').textContent = `${statusText()} | Clearance: ${levelInfo(state.intern.level).name}${brownout}`;
     root.classList.toggle('brownout', !!brownout);

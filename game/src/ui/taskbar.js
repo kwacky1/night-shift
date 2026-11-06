@@ -70,12 +70,13 @@ export const renderTaskbar = (bar, state, prev) => {
   if (clock.textContent !== label) clock.textContent = label;
   const intern = bar.querySelector('.intern');
   const unread = unreadForPlayer(state);
-  const mode = ui.internStatus === 'taken' ? 'LINE TAKEN' : isBrownout(state) ? 'BROWNOUT' : ({ online: 'ONLINE', connecting: 'DIALLING' }[ui.internStatus] ?? 'SCRIPTED');
+  const mode = ui.internStatus === 'taken' ? 'LINE TAKEN' : ui.internStatus === 'outdated' ? 'DRIVER OLD' : isBrownout(state) ? 'BROWNOUT' : ({ online: 'ONLINE', connecting: 'DIALLING' }[ui.internStatus] ?? 'SCRIPTED');
   const text = `INTERN: ${mode}${unread ? ` (${unread})` : ''}`;
   if (intern.textContent !== text) intern.textContent = text;
   intern.dataset.status = ui.internStatus;
+  intern.title = ui.internStatus === 'outdated' ? `${ui.internDriver?.text ?? 'INTERN DRIVER OUT OF DATE'}. Open INTERN.EXE.` : 'Open INTERN.EXE';
   intern.classList.toggle('online', ui.internStatus === 'online');
-  intern.classList.toggle('taken', ui.internStatus === 'taken');
+  intern.classList.toggle('taken', ui.internStatus === 'taken' || ui.internStatus === 'outdated');
   intern.classList.toggle('unread', unread > 0);
   const power = bar.querySelector('.power');
   const status = powerStatus(state);

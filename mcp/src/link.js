@@ -6,6 +6,9 @@
 import { EventEmitter } from 'node:events';
 import { WebSocketServer } from 'ws';
 import { InboundMessage } from './schema.js';
+import { GAME_VERSION as DRIVER_VERSION, VERSION_CLOSE_CODE, outdatedText, versionTag } from '../../game/src/bridge/api.js';
+
+export { DRIVER_VERSION };
 
 export const DEFAULT_PORT = 7117;
 const MAX_PAYLOAD = 2 * 1024 * 1024;
@@ -50,6 +53,8 @@ export class GameLink extends EventEmitter {
     this.nextId = 1;
     this.wss = null;
     this.heartbeat = null;
+    this.mismatch = null;
+    this.lastRejection = null;
   }
 
   get connected() {
@@ -120,6 +125,7 @@ export class GameLink extends EventEmitter {
     }
     this.socket = ws;
     this.state = null;
+    this.lastRejection = null;
     ws.isAlive = true;
     ws.on('pong', () => (ws.isAlive = true));
     ws.on('message', (data, isBinary) => {
@@ -152,21 +158,31 @@ export class GameLink extends EventEmitter {
 
   #receive(ws, text) {
     if (ws !== this.socket) return;
-    let parsed;
+    let raw;
     try {
-      parsed = InboundMessage.safeParse(JSON.parse(text));
+      raw = JSON.parse(text);
     } catch {
       this.log('Dropped non-JSON message from the game.');
       return;
     }
+    if (raw?.type === 'hello' && !this.#handshake(ws, raw)) return;
+    const parsed = InboundMessage.safeParse(raw);
     if (!parsed.success) {
-      this.log(`Dropped invalid message from the game: ${parsed.error.issues[0]?.message ?? 'unknown'}`);
+      const issue = parsed.error.issues[0];
+      const reason = `${issue?.path?.join('.') || 'message'}: ${issue?.message ?? 'unknown'}`.slice(0, 200);
+      this.log(`Could not read a ${String(raw?.type).slice(0, 16)} message from the game (${reason}).`);
+      // Never silently: the game shows LINE NOISE, the tools say so too.
+      if (raw?.type === 'hello' || raw?.type === 'state') {
+        this.lastRejection = reason;
+        ws.send(JSON.stringify({ type: 'warn', reason }));
+      }
       return;
     }
     const msg = parsed.data;
     if (msg.type === 'hello' || msg.type === 'state') {
       const first = !this.state;
       this.state = msg.state;
+      this.lastRejection = null;
       if (msg.type === 'hello' || first) {
         this.log('Game connected.');
         this.emit('connected', msg.state);
@@ -179,6 +195,21 @@ export class GameLink extends EventEmitter {
       this.pending.delete(msg.id);
       p.resolve({ ok: msg.ok, error: msg.error });
     }
+  }
+
+  // Version check on hello. Returns true to carry on, false after rejecting the game.
+  #handshake(ws, raw) {
+    const game = { protocol: Number.isInteger(raw.protocol) ? raw.protocol : null, version: Number.isInteger(raw.version) ? raw.version : null };
+    if (game.protocol === DRIVER_VERSION.protocol && game.version === DRIVER_VERSION.version) {
+      this.mismatch = null;
+      ws.send(JSON.stringify({ type: 'welcome', protocol: DRIVER_VERSION.protocol, version: DRIVER_VERSION.version, driver: 'night-shift-mcp' }));
+      return true;
+    }
+    this.mismatch = { game, driver: DRIVER_VERSION, text: outdatedText(game, DRIVER_VERSION) };
+    this.log(`${this.mismatch.text}. Restart night-shift-mcp from the same checkout as the game.`);
+    ws.send(JSON.stringify({ type: 'reject', reason: 'version', game, driver: DRIVER_VERSION }));
+    ws.close(VERSION_CLOSE_CODE, `Driver ${versionTag(DRIVER_VERSION)}, game ${versionTag(game)}`);
+    return false;
   }
 
   #beat() {

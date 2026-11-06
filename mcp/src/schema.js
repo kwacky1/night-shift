@@ -91,7 +91,7 @@ export const GameState = z.object({
 });
 
 export const InboundMessage = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('hello'), protocol: z.literal(2), version: z.number().int(), state: GameState }),
+  z.object({ type: z.literal('hello'), protocol: z.number().int(), version: z.number().int(), state: GameState }),
   z.object({ type: z.literal('state'), action: z.string().max(64), state: GameState }),
   z.object({ type: z.literal('result'), id: z.string().max(64), ok: z.boolean(), error: z.string().max(500).optional() }),
 ]);

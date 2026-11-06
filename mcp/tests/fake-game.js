@@ -5,7 +5,7 @@ import WebSocket from 'ws';
 import { createStore } from '../../game/src/core/store.js';
 import { reducer } from '../../game/src/core/reducer.js';
 import { actions } from '../../game/src/core/actions.js';
-import { createInitialState } from '../../game/src/core/initialState.js';
+import { createInitialState, STATE_VERSION } from '../../game/src/core/initialState.js';
 import { handleBridgeMessage, PROTOCOL_VERSION } from '../../game/src/bridge/api.js';
 
 const load = async (name) => JSON.parse(await readFile(new URL(`../../game/data/${name}`, import.meta.url), 'utf8'));
@@ -28,18 +28,24 @@ export class FakeGame {
     this.ws = null;
   }
 
-  connect(port, { origin } = {}) {
+  connect(port, { origin, hello = {} } = {}) {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(`ws://127.0.0.1:${port}`, origin ? { origin } : {});
       this.ws = ws;
+      this.received = [];
       const send = (msg) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(msg));
+      this.send = send;
       ws.on('open', () => {
-        send({ type: 'hello', protocol: PROTOCOL_VERSION, version: this.store.getState().version, state: this.store.getState() });
+        send({ type: 'hello', protocol: PROTOCOL_VERSION, version: STATE_VERSION, state: this.store.getState(), ...hello });
         this.unsubscribe = this.store.subscribe((state, prev, action) => send({ type: 'state', action: action.type, state }));
         resolve(this);
       });
       ws.on('message', (data) => {
-        const reply = handleBridgeMessage(this.store, data.toString());
+        const text = data.toString();
+        try {
+          this.received.push(JSON.parse(text));
+        } catch {}
+        const reply = handleBridgeMessage(this.store, text);
         if (reply) send(reply);
       });
       ws.on('close', (code) => {

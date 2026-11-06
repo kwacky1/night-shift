@@ -22,13 +22,28 @@ export const notConnectedText = (port) =>
     `(or load the game with ?intern=ws://localhost:${port}). Then try again.`,
   ].join('\n');
 
+export const outdatedDriverText = (mismatch) =>
+  [
+    `${mismatch.text}.`,
+    'The sysadmin\'s game is a different build from this intern driver (night-shift-mcp), so the line is dead.',
+    'Restart night-shift-mcp from the same checkout as the game (or update it), then ask the sysadmin to Redial in INTERN.EXE.',
+  ].join('\n');
+
+const lineNoise = (reason) => `\n\n(LINE NOISE: the game's last update could not be read: ${reason}. What you see may be stale. The driver may be out of date.)`;
+
 export const createTools = (link, { port = link.port } = {}) => {
   // read_messages cursor: the highest player message id the agent has already been shown.
   let seenId = 0;
 
   const withGame = (fn, { needsDesktop = true } = {}) => async (args = {}) => {
     const state = link.state;
-    if (!link.connected || !state) return text(notConnectedText(port));
+    if (!link.connected || !state) return text(link.mismatch ? outdatedDriverText(link.mismatch) : notConnectedText(port));
+    const res = await guarded(fn, state, args, needsDesktop);
+    if (link.lastRejection && res?.content?.[0]?.type === 'text') res.content[0].text += lineNoise(link.lastRejection);
+    return res;
+  };
+
+  const guarded = async (fn, state, args, needsDesktop) => {
     if (needsDesktop && state.phase === 'over') return text(state.shiftEnd?.reason === 'blackout' ? 'BLACKOUT. The mainframe is down and the shift is over. Nothing on the network until the sysadmin clocks in for another shift.' : 'It is 06:00. The shift is over. Nothing on the network until the sysadmin clocks in for another shift.');
     if (needsDesktop && state.phase !== 'desktop') return text('The sysadmin has not clocked in yet. Nothing on the network until they do.');
     try {

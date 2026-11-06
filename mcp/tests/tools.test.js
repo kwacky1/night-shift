@@ -1,7 +1,7 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
-import { GameLink, isAllowedOrigin, isLocalHostHeader } from '../src/link.js';
+import { DRIVER_VERSION, GameLink, isAllowedOrigin, isLocalHostHeader } from '../src/link.js';
 import { createTools, notConnectedText } from '../src/tools.js';
 import { actions } from '../../game/src/core/actions.js';
 import { FakeGame, newStore, waitFor } from './fake-game.js';
@@ -99,6 +99,42 @@ test('invalid and oversized messages from the game are dropped', async () => {
   await new Promise((r) => setTimeout(r, 50));
   assert.equal(link.state, before);
   assert.ok(link.connected);
+});
+
+test('handshake: a matching game is welcomed', async () => {
+  await connectGame();
+  await waitFor(() => game.received.some((m) => m.type === 'welcome'));
+  const welcome = game.received.find((m) => m.type === 'welcome');
+  assert.deepEqual([welcome.protocol, welcome.version], [DRIVER_VERSION.protocol, DRIVER_VERSION.version]);
+  assert.equal(link.mismatch, null);
+});
+
+test('handshake: a game from another build is rejected, and the tools say so in character', async () => {
+  const old = new FakeGame();
+  game = old;
+  await old.connect(link.port, { hello: { protocol: 2, version: 3 } });
+  await waitFor(() => old.closeCode === 4003);
+  const reject = old.received.find((m) => m.type === 'reject');
+  assert.deepEqual(reject.driver, DRIVER_VERSION);
+  assert.equal(link.connected, false);
+  const res = await call('whoami');
+  assert.match(res.text, new RegExp(`INTERN DRIVER OUT OF DATE \\(game v2\\.3, driver v${DRIVER_VERSION.protocol}\\.${DRIVER_VERSION.version}\\)`));
+  assert.match(res.text, /Restart night-shift-mcp/);
+  // The right build dials in: the line comes back.
+  await connectGame();
+  assert.match((await call('whoami')).text, /PROBATION/);
+});
+
+test('a state the driver cannot read is flagged as LINE NOISE, not dropped silently', async () => {
+  await connectGame();
+  const s = game.store.getState();
+  game.send({ type: 'state', action: 'TICK', state: { ...s, phase: 'x'.repeat(40) } });
+  await waitFor(() => game.received.some((m) => m.type === 'warn'));
+  assert.match(game.received.find((m) => m.type === 'warn').reason, /phase/);
+  assert.match((await call('whoami')).text, /LINE NOISE.*phase/s);
+  game.playerSays('back to normal');
+  await waitFor(() => link.lastRejection === null);
+  assert.doesNotMatch((await call('whoami')).text, /LINE NOISE/);
 });
 
 test('the link forgets the game when it disconnects', async () => {

@@ -103,9 +103,13 @@ const boot = async () => {
       return null;
     }
   };
-  const setInternStatus = (status) => {
-    if (ui.internStatus === status) return;
+  const setInternStatus = (status, detail = null) => {
+    const driver = status === 'outdated' ? detail : null;
+    const warning = status === 'online' ? (detail?.warning ?? (ui.internStatus === 'online' ? ui.internWarning : null)) : null;
+    if (ui.internStatus === status && ui.internDriver === driver && ui.internWarning === warning) return;
     ui.internStatus = status;
+    ui.internDriver = driver;
+    ui.internWarning = warning;
     ctx.rerender();
   };
 

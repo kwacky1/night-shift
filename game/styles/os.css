@@ -340,7 +340,7 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
 .intern-app[data-status='connecting'] .led { background: var(--amber); animation: blink 0.8s steps(1) infinite; }
 .intern-app .status { font-size: 11px; color: #333; }
 .intern-app.brownout .status { color: #a00; }
-.intern-app .line-taken {
+.intern-app .line-taken, .intern-app .driver-old {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -351,9 +351,11 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
   font: 12px/1.3 var(--mono);
   border: 2px solid #ffb000;
 }
-.intern-app .line-taken[hidden] { display: none; }
-.intern-app .line-taken b { flex-basis: 100%; letter-spacing: 1px; }
-.intern-app .line-taken span { flex: 1; }
+.intern-app .driver-old { color: #ff6060; border-color: #ff6060; }
+.intern-app .line-taken[hidden], .intern-app .driver-old[hidden], .intern-app .line-noise[hidden] { display: none; }
+.intern-app .line-taken b, .intern-app .driver-old b { flex-basis: 100%; letter-spacing: 1px; }
+.intern-app .line-taken span, .intern-app .driver-old span { flex: 1; }
+.intern-app .line-noise { padding: 2px 8px; background: #000; color: #ffb000; font: 11px/1.3 var(--mono); }
 .intern-app .chat {
   flex: 1;
   overflow: auto;
