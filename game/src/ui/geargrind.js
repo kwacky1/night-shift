@@ -3,7 +3,7 @@
 // a DRIVE_REPORT to the store four times a second. The 60 Hz sim never touches the store.
 import { actions } from '../core/actions.js';
 import { powerConfig, powerLevel, powerStatus } from '../core/power.js';
-import { chargeStatus, gradeChanges, lookAhead } from '../logic/gearStatus.js';
+import { chargeStatus, FLASHES, gradeChanges, lookAhead, overlayStatus, wrapText } from '../logic/gearStatus.js';
 import { advance, chargeBand, createSim, DEFAULT_GEAR_KEYS, forceStall, gradeAt, heightProfile, roadLength, sanitiseGearKeys } from '../logic/gearbox.js';
 
 const KEYS_KEY = 'night-shift:gear-keys';
@@ -13,7 +13,6 @@ const W = 500;
 const H = 200;
 const AHEAD_M = 240;
 const BEHIND_M = 60;
-const STALL_WORDS = { bog: 'BOGGED DOWN', 'over-rev': 'OVER-REVVED', surge: 'POWER SURGE' };
 
 const keyName = (code) =>
   ({ Space: 'Space', ShiftLeft: 'Left Shift', ShiftRight: 'Right Shift', ControlLeft: 'Left Ctrl', ControlRight: 'Right Ctrl', ArrowUp: 'Up', ArrowDown: 'Down' })[code] ??
@@ -178,7 +177,7 @@ export const geargrindView = {
           c.rebinding.shift();
           if (!c.rebinding.length) {
             const next = sanitiseGearKeys(c.rebinding.keys);
-            if (next.clutch !== c.rebinding.keys.clutch || next.up !== c.rebinding.keys.up || next.down !== c.rebinding.keys.down) flash('KEYS CLASH - DEFAULTS RESTORED', 2000);
+            if (next.clutch !== c.rebinding.keys.clutch || next.up !== c.rebinding.keys.up || next.down !== c.rebinding.keys.down) flash(FLASHES.clash, 2000);
             c.keys = next;
             localStorage.setItem(KEYS_KEY, JSON.stringify(next));
             c.rebinding = null;
@@ -286,10 +285,10 @@ export const geargrindView = {
         c.acc.stalls += r.sim.stalls - before.stalls;
         for (const ev of r.events) {
           if (ev.type === 'grind') {
-            flash('GRRRIND! CLUTCH FIRST');
+            flash(FLASHES.grind);
             c.audio?.grind();
-          } else if (ev.type === 'stall') flash(`STALLED: ${STALL_WORDS[ev.why] ?? ev.why}`, 2000);
-          else if (ev.type === 'start') flash('ENGINE STARTED');
+          } else if (ev.type === 'stall') flash(FLASHES.stall(ev.why), 2000);
+          else if (ev.type === 'start') flash(FLASHES.start);
         }
       } else c.pending = { up: false, down: false };
       if (now - c.lastReport >= REPORT_MS) report(now);
@@ -300,7 +299,18 @@ export const geargrindView = {
         c.lastStatus = now;
         const [kind, text] = chargeStatus(cfg, c.sim, c.paused, st);
         c.statusKind = kind;
-        if (statusEl.textContent !== text) statusEl.textContent = text;
+        if (statusEl.dataset.text !== text) {
+          // The drain half wraps as one piece, so a narrow window breaks the line at the bar.
+          const [main, drain] = text.split(' | ');
+          statusEl.dataset.text = text;
+          statusEl.textContent = main;
+          if (drain) {
+            const span = document.createElement('span');
+            span.className = 'drain';
+            span.textContent = ` | ${drain}`;
+            statusEl.append(' ', span);
+          }
+        }
         if (statusEl.dataset.charging !== kind) statusEl.dataset.charging = kind;
       }
       draw(g, cfg, c, now);
@@ -320,7 +330,7 @@ export const geargrindView = {
       if (c.sim.running) {
         c.sim = forceStall(c.sim, 'surge');
         c.acc.stalls++;
-        c.flash = { text: 'STALLED: POWER SURGE', until: performance.now() + 2500 };
+        c.flash = { text: FLASHES.stall('surge'), until: performance.now() + 2500 };
       }
     }
     if (prev && prev.power === state.power) return;
@@ -375,7 +385,7 @@ const draw = (g, cfg, c, now) => {
     g.fillRect(px, py - 22, 1, 22);
     g.fillStyle = gradeColour(ch.grade);
     const label = `${ch.grade > 0.005 ? '\u25B2' : ch.grade < -0.005 ? '\u25BC' : '\u25B6'}${Math.round(Math.abs(ch.grade) * 100)}%`;
-    g.fillText(label, px + 3, py - 12);
+    g.fillText(label, Math.max(2, Math.min(px + 3, W - g.measureText(label).width - 2)), py - 12);
   }
   g.textBaseline = 'top';
 
@@ -404,18 +414,22 @@ const draw = (g, cfg, c, now) => {
   g.textBaseline = 'top';
   g.fillText(s.gear ? String(s.gear) : 'N', 10, 6);
   g.font = '13px "Courier New", monospace';
-  g.fillText(`${Math.round(s.v * 3.6)} km/h`, 44, 10);
   const pct = (gr) => `${gr > 0 ? '+' : ''}${Math.round(gr * 100)}%`;
-  g.fillText(`grade ${pct(s.grade)}`, 44, 26);
+  const band = s.running && !s.clutch && s.gear ? chargeBand(cfg, s.rpm) : 0;
+  const left = [`${Math.round(s.v * 3.6)} km/h`, `grade ${pct(s.grade)}`, `charge ${'#'.repeat(Math.round(band * 5)).padEnd(5, '.')}`];
+  left.slice(0, 2).forEach((t, i) => g.fillText(t, 44, 10 + i * 16));
+  g.fillStyle = band > 0.8 ? '#33ff66' : band > 0.3 ? '#ffb000' : '#6a3c00';
+  g.fillText(left[2], 44, 42);
   const ahead = lookAhead(cfg, s, c.statusKind);
   if (ahead) {
+    const right = W - 8;
+    const room = right - (44 + Math.max(...left.map((t) => g.measureText(t).width)) + 16);
+    const lines = [ahead.text, ...(ahead.advice ? [`-> ${ahead.advice}`] : [])].flatMap((t) => wrapText(t, room, (x) => g.measureText(x).width));
     g.fillStyle = Math.abs(ahead.steeper) > 0.03 ? gradeColour(ahead.grade) : '#1d6a35';
-    g.fillText(ahead.text, W - 190, 10);
-    if (ahead.advice) g.fillText(`-> ${ahead.advice}`, W - 190, 26);
+    g.textAlign = 'right';
+    lines.slice(0, 3).forEach((t, i) => g.fillText(t, right, 10 + i * 16));
+    g.textAlign = 'left';
   }
-  const band = s.running && !s.clutch && s.gear ? chargeBand(cfg, s.rpm) : 0;
-  g.fillStyle = band > 0.8 ? '#33ff66' : band > 0.3 ? '#ffb000' : '#6a3c00';
-  g.fillText(`charge ${'#'.repeat(Math.round(band * 5)).padEnd(5, '.')}`, 44, 42);
 
   // Tachometer with the CHARGE ZONE marked.
   const tx = 10;
@@ -447,20 +461,15 @@ const draw = (g, cfg, c, now) => {
   g.textBaseline = 'top';
 
   // Status line.
-  let status = '';
-  if (c.paused) status = 'PAUSED';
-  else if (now < c.flash.until) status = c.flash.text;
-  else if (s.stalled) status = c.clutchKey || c.clutchMouse ? 'CRANKING...' : 'STALLED - HOLD CLUTCH TO RESTART';
-  else if (!s.gear) status = 'NEUTRAL - CLUTCH IN, SHIFT UP';
-  else if (s.lug > 0.2) status = 'BOGGING - CHANGE DOWN';
-  else if (s.overRev > 0.3) status = 'LIMITER - CHANGE UP';
+  const status = overlayStatus(s, { paused: c.paused, flash: now < c.flash.until ? c.flash.text : '', clutchHeld: c.clutchKey || c.clutchMouse });
   if (status) {
     g.font = 'bold 16px "Courier New", monospace';
-    const w = g.measureText(status).width;
+    const lines = wrapText(status, W - 24, (x) => g.measureText(x).width);
+    const w = Math.max(...lines.map((t) => g.measureText(t).width));
     g.fillStyle = 'rgba(0,0,0,0.7)';
-    g.fillRect((W - w) / 2 - 6, 60, w + 12, 22);
+    g.fillRect((W - w) / 2 - 6, 60, w + 12, 4 + lines.length * 18);
     g.fillStyle = /STALL|GRIND|BOG|LIMIT|CLASH/.test(status) ? '#ffb000' : '#33ff66';
-    g.fillText(status, (W - w) / 2, 63);
+    lines.forEach((t, i) => g.fillText(t, (W - g.measureText(t).width) / 2, 63 + i * 18));
   }
 };
 

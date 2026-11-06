@@ -480,7 +480,7 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
 /* GEARGRIND.EXE */
 .geargrind { position: relative; display: flex; flex-direction: column; gap: 6px; height: 100%; padding: 6px; box-sizing: border-box; outline: none; }
 .window.focused .geargrind:focus-within canvas { box-shadow: inset -1px -1px var(--hi), inset 1px 1px var(--lo), 0 0 0 2px var(--phosphor); }
-.geargrind canvas { width: 100%; aspect-ratio: 5 / 2; background: #000; image-rendering: pixelated; box-shadow: inset -1px -1px var(--hi), inset 1px 1px var(--lo); }
+.geargrind canvas { width: 100%; aspect-ratio: 5 / 2; flex: 0 1 auto; min-height: 0; object-fit: contain; background: #000; image-rendering: pixelated; box-shadow: inset -1px -1px var(--hi), inset 1px 1px var(--lo); }
 .gg-power { display: flex; align-items: center; gap: 8px; font: 12px var(--mono); }
 .gg-power .meter { flex: 1; height: 14px; background: #000; box-shadow: inset -1px -1px var(--hi), inset 1px 1px var(--lo); padding: 2px; box-sizing: border-box; }
 .gg-power .fill { height: 100%; background: var(--phosphor); transition: width 0.25s linear; }
@@ -491,7 +491,8 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
 .gg-controls .spacer { flex: 1; }
 .gg-controls kbd { font: 10px var(--mono); color: var(--lo); margin-left: 4px; }
 .gg-help { font-size: 11px; color: #333; }
-.gg-status { font: bold 11px var(--mono); padding: 2px 4px; background: #000; color: #ff6040; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gg-status { font: bold 11px var(--mono); padding: 2px 4px; background: #000; color: #ff6040; overflow-wrap: anywhere; min-height: 2.6em; }
+.gg-status .drain { white-space: nowrap; color: #808080; }
 .gg-status[data-charging='yes'] { color: var(--phosphor); }
 .gg-status[data-charging='slow'] { color: var(--amber); }
 .gg-controls button.pressed { box-shadow: inset 1px 1px var(--lo), inset -1px -1px var(--hi); }
