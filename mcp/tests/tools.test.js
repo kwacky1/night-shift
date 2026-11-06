@@ -4,7 +4,10 @@ import WebSocket from 'ws';
 import { DRIVER_VERSION, GameLink, isAllowedOrigin, isLocalHostHeader } from '../src/link.js';
 import { createTools, notConnectedText } from '../src/tools.js';
 import { actions } from '../../game/src/core/actions.js';
-import { FakeGame, newStore, waitFor } from './fake-game.js';
+import { createStore } from '../../game/src/core/store.js';
+import { reducer } from '../../game/src/core/reducer.js';
+import { createInitialState } from '../../game/src/core/initialState.js';
+import { FakeGame, gameData, newStore, waitFor } from './fake-game.js';
 
 let link;
 let tools;
@@ -290,4 +293,65 @@ test('after 06:00 the tools say the shift is over', async () => {
   await waitFor(() => link.state.phase === 'over');
   assert.match((await call('list_files')).text, /shift is over/);
   assert.match((await call('whoami')).text, /shiftOver/);
+});
+
+// The 06:00 audit, with the generator drain off so the night survives the clock jump.
+const auditStore = () => {
+  const data = { ...gameData, night: { ...gameData.night, power: { ...gameData.night.power, drainPerMinute: 0 } } };
+  const store = createStore(reducer, createInitialState(data));
+  store.dispatch(actions.bootComplete());
+  store.dispatch(actions.clockIn());
+  store.dispatch(actions.tick(420));
+  store.dispatch(actions.tick(60));
+  return store;
+};
+
+test('read_file numbers lines so they can be cited', async () => {
+  await connectGame();
+  const { text } = await call('read_file', { path: 'BOOTLOG.TXT' });
+  assert.match(text, /^ {2}1\| /m);
+  assert.match(text, /^ {2}4\| /m);
+});
+
+test('audit: no audit before 06:00, and submit_blame refuses politely', async () => {
+  await connectGame();
+  assert.match((await call('audit_status')).text, /no audit running/);
+  assert.match((await call('submit_blame', { suspect: '0117' })).text, /no audit running/);
+});
+
+test('audit: audit_status shows suspects and read files, never the verdict rules', async () => {
+  const store = auditStore();
+  assert.equal(store.getState().blame.open, true);
+  await connectGame(store);
+  assert.match((await call('whoami')).text, /"audit": "OPEN/);
+  await call('read_file', { path: 'BOOTLOG.TXT' });
+  const { text } = await call('audit_status');
+  assert.match(text, /"id": "0117"/);
+  assert.match(text, /BOOTLOG\.TXT/);
+  assert.match(text, /"sysadminFiled": false/);
+  assert.doesNotMatch(text, /points|clears|endings|tags|weight|verdict/i);
+  assert.ok(!JSON.stringify(link.state.blame).match(/points|endings|scripted/), 'the schema strips the verdict config');
+});
+
+test('audit: citations must be files the intern has read, and the verdict comes back', async () => {
+  const store = auditStore();
+  await connectGame(store);
+  const unread = await call('submit_blame', { suspect: 'sysadmin', evidence: ['BOOTLOG.TXT:4'] });
+  assert.equal(unread.isError, true);
+  assert.match(unread.text, /have not read/);
+  await call('read_file', { path: 'BOOTLOG.TXT' });
+  assert.match((await call('submit_blame', { suspect: 'nobody' })).text, /Unknown suspect/);
+  assert.match((await call('submit_blame', { suspect: 'sysadmin', evidence: ['BOOTLOG.TXT:999'] })).text, /has lines 1-/);
+  const filed = await call('submit_blame', { suspect: '#0117', evidence: ['BOOTLOG.TXT:4'], statement: 'It was the last bloke.' });
+  assert.match(filed.text, /Statement filed/);
+  await waitFor(() => link.state.blame.intern);
+  assert.deepEqual(store.getState().blame.intern.evidence, ['bootlog:4']);
+  assert.match((await call('submit_blame', { suspect: '0117' })).text, /already filed/);
+  assert.match((await call('audit_status')).text, /BOOTLOG\.TXT:4/);
+  assert.match((await call('shift_left', { puzzle: 'payroll' })).text, /audit/i);
+  store.dispatch(actions.blameSubmit('0117'));
+  await waitFor(() => link.state.phase === 'over');
+  assert.equal(link.state.shiftEnd.reason, 'audit');
+  assert.match((await call('whoami')).text, /audit is closed\. Head Office: /);
+  assert.match((await call('read_logs')).text, /shift is over/);
 });

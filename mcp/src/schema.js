@@ -78,13 +78,39 @@ const Power = z.object({
     .optional(),
 });
 
+const Ending = z.object({ id: z.string().max(32), title: z.string().max(64), text: z.string().max(500) });
+
+// BLAME.EXE. The intern gets the suspects and limits, its own statement, whether the sysadmin
+// has filed (not what they said) and the verdict once it's in. Evidence weights and ending rules
+// are stripped here and never reach a tool.
+const Blame = z.object({
+  open: z.boolean(),
+  config: z
+    .object({
+      maxEvidence: z.number().int().min(1).max(8).optional(),
+      statementMax: z.number().int().min(1).max(500).optional(),
+      suspects: z.array(z.object({ id: z.string().max(32), name: z.string().max(64) })).max(16),
+    })
+    .nullable()
+    .optional()
+    .default(null),
+  player: z.object({}).nullable().optional().default(null),
+  intern: z
+    .object({ suspect: z.string().max(32), evidence: z.array(z.string().max(40)).max(8), statement: z.string().max(500), at: z.string().max(8).optional() })
+    .nullable()
+    .optional()
+    .default(null),
+  result: z.object({ suspect: z.string().max(32).nullable().optional(), ending: Ending }).nullable().optional().default(null),
+});
+
 export const GameState = z.object({
   version: z.number().int(),
   phase: z.string().max(16),
   clock: z.object({ elapsed: z.number().int().min(0), length: z.number().int().min(1) }),
   shiftNumber: z.number().int().min(1).optional().default(1),
-  shiftEnd: z.object({ reason: z.enum(['clock', 'blackout']), at: z.string().max(8) }).nullable().optional().default(null),
+  shiftEnd: z.object({ reason: z.enum(['clock', 'blackout', 'audit']), at: z.string().max(8), ending: Ending.optional() }).nullable().optional().default(null),
   power: Power.optional(),
+  blame: Blame.optional(),
   stats: z.record(z.string().max(32), z.number().min(0)).refine((s) => Object.keys(s).length <= 32, 'Too many stats').optional(),
   files: z.record(id, File).refine((files) => Object.keys(files).length <= 500, 'Too many files'),
   puzzles: z.record(id, Puzzle).refine((p) => Object.keys(p).length <= 100, 'Too many puzzles'),
