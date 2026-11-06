@@ -29,6 +29,8 @@ npm test        # node:test suites for the game and the MCP server
 npm run smoke   # end to end: MCP client -> server -> the game in headless Chrome (needs Chrome or Edge)
 ```
 
+The dev server sends `Cache-Control: no-store` on every response, so after editing code just refresh the page; no restart needed. Restart it only when you switch worktrees (it serves the `game/` folder of the checkout it was started from). The itch.io build is a static zip and isn't affected.
+
 For itch.io, zip the contents of `game/` (so `index.html` is at the root of the zip) and upload it as an HTML game.
 
 ### Controls
