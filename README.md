@@ -86,13 +86,23 @@ So you're always splitting your attention: a puzzle needs solving, the intern ne
 
 Things happen during the night: messages from Facilities, files that weren't there an hour ago, a generator that has opinions about 03:40, and a colleague called #0117 who payroll says doesn't work here any more. There are more sectors to recover after PAYROLL.DAT and BADGE.DB, and the intern's clearance keeps going up. No spoilers here: read the logs.
 
+### 06:00: the audit
+
+Head Office has questions about NS-02. If BLAME.EXE has made it onto your desktop by 06:00, the clock stops, NS-02 freezes and **BLAME.EXE** opens. You and #0118 each file one statement: who did it (#0117, you, the intern, Facilities or Head Office), up to three `file:line` citations from things you've been able to open tonight, and a sentence of why. The intern files through its own tool (or the scripted intern files after you, and it is not on your side). Head Office weighs the accusations, the evidence and what actually happened on the night, then writes a name in the report. There are several endings. Some of them are not good for you. The end screen keeps an **ENDINGS FOUND** tally across shifts (in `localStorage` under `night-shift:endings`, separate from the save).
+
 ### End of shift
 
-At 06:00 (or at a blackout) the shift ends on a summary screen: sectors recovered, power, kilometres driven, stalls and whether you used the intern (a real agent, the scripted one, or nobody). **Clock in for another shift** starts a fresh game. A finished shift is never left as a save you can't play.
+At 06:00 (or at a blackout, or after the audit) the shift ends on a summary screen: sectors recovered, power, kilometres driven, stalls and whether you used the intern (a real agent, the scripted one, or nobody). **Clock in for another shift** starts a fresh game. A finished shift is never left as a save you can't play.
 
 ### Bit Rot legend
 
 Each puzzle window has a legend: **green** squares are lit and correct, **amber** squares are lit but should be off, and a **dashed amber outline** is a square that should be lit but isn't.
+
+### Two pairs of hands
+
+Some ops only work from one side. A small **CONSOLE** tag means only you can run it at NS-02; **REMOTE** means only the intern can, down the line (clicking it asks #0118 to do it). The intern also has a small remote op quota per sector (**REMOTE n/N** on the board); undo or reset gives ops back. Neither of you can recover a sector alone.
+
+An op that wouldn't change the value (`>> 3` on `0x0000`, say) flashes **NO CHANGE** and doesn't cost a move or any remote quota. The intern's tools say NO CHANGE too.
 
 ## Connect your intern
 
@@ -166,6 +176,8 @@ Then say something like *"You're the intern in NIGHT_SHIFT.EXE. Clock in and hel
 
 Open **INTERN.EXE** (desktop, Start menu or the `INTERN:` tray button), check the address (`ws://localhost:7117`) and click **Dial**. The tray shows `INTERN: ONLINE` when the agent is on the line. Locally you can also load `http://localhost:8080/?intern=ws://localhost:7117`. The game remembers the address and quietly redials it whenever the game loads (a few tries with backoff). If nothing answers, the scripted intern stays on duty.
 
+The game and the driver check each other's protocol and state version on `hello`. If they don't match (say you updated the game but your agent is still running an old `night-shift-mcp`), the line is refused out loud: INTERN.EXE and the tray say **INTERN DRIVER OUT OF DATE (game vN, driver vM)** / `DRIVER OLD`, and every tool tells the agent the same. Restart the server from the same checkout and Redial. A state message the driver can't read shows **LINE NOISE** rather than going quietly deaf.
+
 Only one game window can hold the line. If you open the game in a second tab, that tab takes the line and the first one shows **LINE TAKEN BY ANOTHER TERMINAL** in INTERN.EXE and the tray, with a **Redial** button to take it back.
 
 ### What the intern can do
@@ -173,13 +185,14 @@ Only one game window can hold the line. If you open the game in a second tab, th
 | Tool | |
 | --- | --- |
 | `whoami` | Badge, clearance, allowed ops, the clock and mainframe power |
-| `list_files`, `read_file` | The whole drive, including hidden SYSTEM files, subject to clearance |
+| `list_files`, `read_file` | The whole drive, including hidden SYSTEM files, subject to clearance. Lines are numbered for citing. |
 | `read_logs` | The system event log (never shown on your screen) |
 | `inspect_puzzle` | A sector's value in hex/binary and its ops. **Never the target.** Keyed masks are redacted. |
 | `shift_left`, `shift_right`, `xor`, `enter_key` | Apply ops (costs your moves) or enter an override key |
 | `message_player`, `read_messages`, `wait_for_player` | Talk to you through INTERN.EXE |
+| `audit_status`, `submit_blame` | The 06:00 audit: suspects, files it has read, and its one statement (`suspect`, `evidence: ["PATH:LINE"]`, `statement`). It can only cite files it has actually read that shift. |
 
-There is deliberately no "dispatch anything" tool. The intern can't undo, reset, rename, open windows or load a save. Clearance starts at **PROBATION** (shifts only), goes up to **OPERATOR** (XOR and restricted SYSTEM files) when PAYROLL.DAT is recovered, and to **SUPERVISOR** (sealed files) later in the night. During a brownout the intern can still chat, but ops and keys are refused. The intern can never drive the generator.
+There is deliberately no "dispatch anything" tool. The intern can't undo, reset, rename, open windows or load a save. Clearance starts at **PROBATION** (shifts only), goes up to **OPERATOR** (XOR and restricted SYSTEM files) when PAYROLL.DAT is recovered, and to **SUPERVISOR** (sealed files) later in the night. During a brownout the intern can still chat, but ops and keys are refused. The intern can never drive the generator. Console-only ops and a spent remote quota are refused in character.
 
 ### No agent? No worries
 
@@ -197,7 +210,8 @@ The itch.io page is served over https, and the game still dials `ws://localhost`
 ### Security
 
 - The WebSocket binds to `127.0.0.1` only, checks the `Host` and `Origin` headers, and accepts one game at a time (a new window replaces the old one).
-- Every message is validated on both sides. The game only accepts `PUZZLE_APPLY_OP`, `PUZZLE_ENTER_KEY` and `CHAT_SEND` from the bridge, rebuilds each one field by field, and stamps it `actor: 'intern'` so the reducer enforces clearance. `HYDRATE` and everything else are refused.
+- Every message is validated on both sides. The game only accepts `PUZZLE_APPLY_OP`, `PUZZLE_ENTER_KEY`, `CHAT_SEND` and `BLAME_SUBMIT` from the bridge, rebuilds each one field by field, and stamps it `actor: 'intern'` so the reducer enforces clearance. `HYDRATE` and everything else are refused.
+- The server strips everything it doesn't need on the way in (zod schema), so audit weights and ending rules never reach a tool. The intern sees the suspects, its own statement and whether you've filed, not what you said.
 - The server never touches your filesystem. "Files" are the game's fake drive, projected from game state.
 
 ## Structure
@@ -210,6 +224,7 @@ game/
     puzzles.json      Bit Rot puzzles: start, target, moveLimit, ops (keyed, playerHides, onSolve)
     intern.json       the scripted fallback intern's lines and power nags
     story.json        the night's story beats
+    blame.json        BLAME.EXE: suspects, evidence weights, facts, endings, the scripted statement
     night.json        clock speed and mainframe power (drain, thresholds)
     gearbox.json      Gear Grind: gears, torque curves, the road
   src/
@@ -223,12 +238,13 @@ game/
       power.js        mainframe power: drain, charge, brownout and friends
       story.js        the story beat engine
       shift.js        end of shift and the summary
+      blame.js        the 06:00 audit: citations, scoring, the verdict, the endings tally
       save.js         save migration (never a dead save)
     logic/            pure 16-bit ops, the puzzle engine (BFS solver, validation), hex in words,
                       gearbox.js (the Gear Grind sim: step(sim, input, dt))
     intern/           the scripted fallback intern
     ui/               DOM rendering: boot, desktop, windows, explorer, viewer, bitrot, intern,
-                      geargrind (canvas + Web Audio), taskbar, shiftend
+                      geargrind (canvas + Web Audio), taskbar, shiftend, blame
     bridge/api.js     window.NIGHT_SHIFT + the ws:// intern bridge (allowlist, reconnect)
     main.js           wires store to UI; timers and saving live here, not in the reducer
   tests/              node:test suites
@@ -258,8 +274,22 @@ Two-sided puzzles use a few extras:
 - `"onSolve": { "internLevel": 2, "message": "..." }` promotes the intern when the sector is recovered.
 
 - `"onSolve": { "drainScale": 0.6 }` makes the mainframe drain slower from then on.
+- `"hands": "player" | "intern"` on an op makes it console-only or remote-only (default `"both"`).
+- `"internMoves": 2` caps the intern's remote ops per attempt on the sector.
 
-The data test checks that keyed puzzles can't be solved without their key and that the key is written down in a hidden file.
+The data test checks that keyed puzzles can't be solved without their key and that the key is written down in a hidden file. `game/tests/hands.test.js` checks that, for every sector, the intern alone can't solve it, the player alone can't solve keyed or remote-only ones, and the two of you together can within the quota (`solveTogether` in `logic/puzzle.js`).
+
+### Tuning the audit
+
+`game/data/blame.json` (validated by `validateBlame`, checked in `game/tests/blame.test.js`):
+
+- `suspects`: `{ id, name }`. Each accusation is worth `accusationWeight` to the accused, unless the accuser's own evidence clears them (a contradiction, which forfeits it).
+- `evidence`: `{ ref: "fileId:line", points: { suspect: n }, clears: [suspect], tags: [...] }`. Cited lines add points; `clears` takes one off a suspect. Uncited lines count for nothing.
+- `facts`: things the night itself proves (`stat`, `solved`, `solvedBy`, `movesBy` intern/player), with points of their own.
+- `endings`: checked in order, the first whose `when` holds wins (`verdict`, `player`/`intern` suspect, `tags` counts, `facts`, `any` of several); the last has no `when` and is the default. Titles 24 characters, text 280.
+- `scripted`: the scripted intern's statements. It only cites what it could read.
+
+The verdict is the unique top score, or nobody on a tie. Each ending is reachable in the tests.
 
 ### Adding a story beat
 
@@ -285,7 +315,7 @@ Add a beat to `game/data/story.json`:
 All game state is one JSON object and every change is a `dispatch(action)`. The game is authoritative: it streams its state to the MCP server, which projects an intern-only view and asks the game to run a handful of allowlisted actions.
 
 - In DevTools: `NIGHT_SHIFT.getState()`, `NIGHT_SHIFT.dispatch(NIGHT_SHIFT.actions.openFile('payroll'))`.
-- The WebSocket protocol (`hello` / `state` / `dispatch` / `result`, protocol 2) is documented at the top of `game/src/bridge/api.js`.
+- The WebSocket protocol (`hello` with `protocol` + `version`, `welcome` / `reject`, `state`, `dispatch`, `result`, `warn`; protocol 3) is documented at the top of `game/src/bridge/api.js`. Bump `STATE_VERSION` (and add a save migration) when the state shape changes; the handshake will then refuse an old driver out loud.
 - `mcp/` imports the game's pure modules (reducer rules, permissions, puzzle logic) from `../game/src`, so it runs from a clone via `npx`/`npm link`. Publishing to npm will need a copy step first.
 
 ## Roadmap
@@ -293,7 +323,7 @@ All game state is one JSON object and every change is a `dispatch(action)`. The 
 1. **Week 1:** OS shell + first Bit Rot puzzle *(done: playable slice in `game/`)*
 2. **Week 2:** MCP bridge, two-way play working *(done: `night-shift-mcp`, INTERN.EXE, clearance, BADGE.DB)*
 3. **Week 3:** Gear Grind power mechanic + story arc *(done: GEARGR~1.EXE, mainframe power and brownouts, the night's story, SUPERVISOR clearance, end-of-shift screen)*
-4. **Week 4:** audio, polish, blame-game finale
+4. **Week 4:** blame-game finale and intern balance *(milestone 1: BLAME.EXE, two pairs of hands, NO CHANGE, the version handshake)*, then audio, polish and shipping to itch.io
 
 Deadline: 1 December 2026, 13:37 PST.
 
