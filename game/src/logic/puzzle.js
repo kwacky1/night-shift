@@ -22,7 +22,7 @@ export const parseWord = (v) => toWord(parseNumber(v) || 0);
 
 export const normaliseOp = (op) => {
   const base = op.type === 'xor' ? { type: 'xor', mask: parseWord(op.mask) } : { type: op.type, n: op.n ?? 1 };
-  return op.keyed ? { ...base, keyed: true } : base;
+  return { ...base, ...(op.keyed ? { keyed: true } : {}), ...(op.hands === 'player' || op.hands === 'intern' ? { hands: op.hands } : {}) };
 };
 
 export const normalisePuzzle = (p) => ({
@@ -65,7 +65,10 @@ export const validatePuzzle = (puzzle) => {
       errors.push(`shift amount out of range: ${op.n}`);
     if (op.type === 'xor' && op.mask === undefined) errors.push('xor op missing mask');
     if (op.keyed !== undefined && typeof op.keyed !== 'boolean') errors.push('keyed must be true or false');
+    if (op.hands !== undefined && !['player', 'intern'].includes(op.hands)) errors.push(`hands must be "player" or "intern": ${op.hands}`);
   }
+  if (puzzle.internMoves !== undefined && !(Number.isInteger(puzzle.internMoves) && puzzle.internMoves >= 0 && puzzle.internMoves <= (puzzle.moveLimit ?? 0)))
+    errors.push('internMoves must be an integer from 0 to moveLimit');
   if (puzzle.playerHides !== undefined && !(Array.isArray(puzzle.playerHides) && puzzle.playerHides.every((h) => PLAYER_HIDES.includes(h))))
     errors.push(`playerHides may only contain ${PLAYER_HIDES.join(', ')}`);
   if (puzzle.onSolve !== undefined) {
@@ -83,8 +86,9 @@ export const validatePuzzle = (puzzle) => {
 };
 
 // Breadth-first search for the shortest op sequence. Returns indices into puzzle.ops, or null.
-// Pass { withoutKeyed: true } to check a puzzle genuinely needs its keyed ops.
-export const solve = (puzzle, maxDepth = puzzle.moveLimit, { withoutKeyed = false } = {}) => {
+// Pass { withoutKeyed: true } to check a puzzle genuinely needs its keyed ops, and { canUse(op, i) }
+// to restrict the ops (one side of the shift on its own).
+export const solve = (puzzle, maxDepth = puzzle.moveLimit, { withoutKeyed = false, canUse = () => true } = {}) => {
   const start = parseWord(puzzle.start);
   const target = parseWord(puzzle.target);
   if (start === target) return [];
@@ -95,6 +99,7 @@ export const solve = (puzzle, maxDepth = puzzle.moveLimit, { withoutKeyed = fals
     for (const value of frontier) {
       for (let i = 0; i < puzzle.ops.length; i++) {
         if (withoutKeyed && puzzle.ops[i].keyed) continue;
+        if (!canUse(puzzle.ops[i], i)) continue;
         const v = applyOp(value, puzzle.ops[i]);
         if (seen.has(v)) continue;
         seen.set(v, { prev: value, op: i });
@@ -104,6 +109,46 @@ export const solve = (puzzle, maxDepth = puzzle.moveLimit, { withoutKeyed = fals
           return path;
         }
         next.push(v);
+      }
+    }
+    frontier = next;
+  }
+  return null;
+};
+
+// Shortest two-sided route: each move is { op, by: 'player' | 'intern' }. The intern may only use
+// internTypes (its clearance), never a player-only op, and at most puzzle.internMoves times. The
+// player never uses an intern-only op. Returns the moves, or null.
+export const solveTogether = (puzzle, { internTypes = OP_TYPES, maxDepth = puzzle.moveLimit } = {}) => {
+  const start = parseWord(puzzle.start);
+  const target = parseWord(puzzle.target);
+  const quota = Number.isInteger(puzzle.internMoves) ? puzzle.internMoves : Infinity;
+  if (start === target) return [];
+  const key = (v, used) => `${v}:${Math.min(used, 99)}`;
+  const seen = new Map([[key(start, 0), null]]);
+  let frontier = [{ value: start, used: 0 }];
+  for (let depth = 0; depth < maxDepth && frontier.length; depth++) {
+    const next = [];
+    for (const node of frontier) {
+      for (let i = 0; i < puzzle.ops.length; i++) {
+        const op = puzzle.ops[i];
+        const sides = [];
+        if (op.hands !== 'intern') sides.push('player');
+        if (op.hands !== 'player' && internTypes.includes(op.type) && node.used < quota) sides.push('intern');
+        for (const by of sides) {
+          const v = applyOp(node.value, op);
+          if (v === node.value) continue;
+          const used = node.used + (by === 'intern' ? 1 : 0);
+          const k = key(v, used);
+          if (seen.has(k)) continue;
+          seen.set(k, { prev: key(node.value, node.used), move: { op: i, by } });
+          if (v === target) {
+            const path = [];
+            for (let cur = k; seen.get(cur); cur = seen.get(cur).prev) path.unshift(seen.get(cur).move);
+            return path;
+          }
+          next.push({ value: v, used });
+        }
       }
     }
     frontier = next;

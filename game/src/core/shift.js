@@ -7,7 +7,8 @@ export const END_REASONS = ['clock', 'blackout'];
 export const internUsage = (stats) => {
   const aiActions = (stats.internOps ?? 0) + (stats.internKeys ?? 0) + (stats.internMessages ?? 0);
   if (aiActions > 0) return { mode: 'ai', count: aiActions };
-  if ((stats.scriptedReplies ?? 0) > 0) return { mode: 'scripted', count: stats.scriptedReplies };
+  const scripted = (stats.scriptedReplies ?? 0) + (stats.scriptedOps ?? 0);
+  if (scripted > 0) return { mode: 'scripted', count: scripted };
   return { mode: 'none', count: 0 };
 };
 

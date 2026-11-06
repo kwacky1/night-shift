@@ -210,13 +210,16 @@ test('PROBATION interns can shift but not XOR', async () => {
 test('end to end: solve payroll together, get promoted, read the key, recover the badge', async () => {
   await connectGame();
   const store = game.store;
-  // Payroll: intern shifts, the sysadmin does the XOR they are not cleared for yet.
+  // Payroll: >>3 is the intern's alone, the XOR is the console's, and the intern gets 2 remote ops.
   await call('shift_right', { puzzle: 'PAYROLL.DAT' });
   store.dispatch(actions.applyOp('payroll', 2));
   await waitFor(() => link.state.puzzles.payroll.value === 0x0f0f);
   await call('shift_left', { puzzle: 'payroll' });
-  const promoted = await call('shift_left', { puzzle: 'payroll' });
-  assert.match(promoted.text, /SECTOR RECOVERED/);
+  assert.match((await call('shift_left', { puzzle: 'payroll' })).text, /REMOTE QUOTA/);
+  store.dispatch(actions.applyOp('payroll', 0));
+  await waitFor(() => link.state.puzzles.payroll.solved);
+  const promoted = await call('read_file', { path: 'PAYROLL.DAT' });
+  assert.match(promoted.text, /PAYROLL EXTRACT/);
   assert.match((await call('whoami')).text, /OPERATOR/);
 
   // NS-02.LOG opens up and spells out the key in words.
@@ -234,9 +237,11 @@ test('end to end: solve payroll together, get promoted, read the key, recover th
   const keyed = await call('xor', { puzzle: 'badge', mask: '0117' });
   assert.match(keyed.text, /Applied XOR 0x0117/);
   assert.deepEqual(store.getState().puzzles.badge.unlocked, [3]);
-  await call('shift_left', { puzzle: 'badge' });
-  const done = await call('xor', { puzzle: 'badge', mask: '0xFF00' });
-  assert.match(done.text, /SECTOR RECOVERED/);
+  assert.match((await call('shift_left', { puzzle: 'badge' })).text, /CONSOLE ONLY/);
+  store.dispatch(actions.applyOp('badge', 0));
+  await waitFor(() => link.state.puzzles.badge.value === 0xf0f0);
+  assert.match((await call('xor', { puzzle: 'badge', mask: '0xFF00' })).text, /REMOTE QUOTA/);
+  store.dispatch(actions.applyOp('badge', 2));
   assert.equal(store.getState().puzzles.badge.solved, true);
 });
 

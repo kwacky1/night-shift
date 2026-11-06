@@ -5,7 +5,7 @@ import { childrenOf, clockMinutes, formatClock, windowForFile } from './selector
 import { applyOp, isSolved, opLabel } from '../logic/puzzle.js';
 import { toHex, toWord } from '../logic/bits.js';
 import { parseKey } from '../logic/words.js';
-import { clampLevel, internActionError, internLevel, isOpUnlocked, levelInfo } from './permissions.js';
+import { canActorUseOp, clampLevel, internActionError, internLevel, isOpUnlocked, levelInfo } from './permissions.js';
 import { chargePower, drainForMinutes, drainRate, isBitrotPowered } from './power.js';
 import { endShift } from './shift.js';
 import { advanceStory, STORY_TRIGGERS } from './story.js';
@@ -138,18 +138,30 @@ const applyPuzzleOp = (state, action) => {
   const p = state.puzzles[puzzleId];
   const op = p?.ops[opIndex];
   if (!p || !op || p.solved || p.failed || !isOpUnlocked(p, opIndex)) return state;
+  if (state.blame?.open) return state;
   const byIntern = action.actor === 'intern';
   if (byIntern && internActionError(state, action)) return state;
+  if (!byIntern && !canActorUseOp('player', op)) return state;
   if (!isBitrotPowered(state)) return state;
+  const fileNames = Object.values(state.files).filter((f) => f.puzzleId === puzzleId);
+  const where = fileNames.map((f) => f.name).join(', ') || puzzleId;
   const value = applyOp(p.value, op);
+  // A no-op costs nothing: no move, no quota. The board flashes NO CHANGE (and the intern is told).
+  if (value === p.value) {
+    let s = updatePuzzle(state, puzzleId, { noop: { seq: (p.noop?.seq ?? 0) + 1, op: opIndex, by: byIntern ? 'intern' : 'player' } });
+    s = log(s, `${byIntern ? '#0118' : 'Sysadmin'}: ${opLabel(op)} on ${where} at ${toHex(value)}. NO CHANGE. No move used.`);
+    return byIntern ? post(s, 'system', `#0118 tried ${opLabel(op)} on ${where}: NO CHANGE (still ${toHex(value)}). No move used.`) : s;
+  }
   const history = [...p.history, p.value];
+  const by = [...(p.by ?? []), byIntern ? 'intern' : 'player'];
   const solved = isSolved(value, p);
   const failed = !solved && history.length >= p.moveLimit;
-  let s = updatePuzzle(state, puzzleId, { value, history, solved, failed });
-  const fileNames = Object.values(s.files).filter((f) => f.puzzleId === puzzleId);
+  let s = updatePuzzle(state, puzzleId, { value, history, by, solved, failed, ...(solved ? { solvedBy: by.at(-1) } : {}) });
   if (byIntern) {
-    s = bumpStat(s, 'internOps');
-    s = post(s, 'system', `#0118 applied ${opLabel(op)} to ${fileNames.map((f) => f.name).join(', ') || puzzleId}.`);
+    s = bumpStat(s, action.scripted ? 'scriptedOps' : 'internOps');
+    s = post(s, 'system', `#0118 applied ${opLabel(op)} to ${where}.`);
+  } else {
+    s = bumpStat(s, 'playerOps');
   }
   if (solved) {
     for (const f of fileNames) s = updateFile(s, f.id, { locked: false });
@@ -169,7 +181,7 @@ const applyPuzzleOp = (state, action) => {
 const enterKey = (state, action) => {
   const p = state.puzzles[action.puzzleId];
   const op = p?.ops[action.opIndex];
-  if (!p || !op?.keyed || p.solved || isOpUnlocked(p, action.opIndex)) return state;
+  if (!p || !op?.keyed || p.solved || isOpUnlocked(p, action.opIndex) || state.blame?.open) return state;
   if (action.actor === 'intern' && internActionError(state, action)) return state;
   const who = action.actor === 'intern' ? '#0118' : 'Sysadmin';
   const mask = parseKey(action.mask);
@@ -325,14 +337,14 @@ const baseReducer = (state, action) => {
 
     case T.PUZZLE_UNDO: {
       const p = state.puzzles[action.puzzleId];
-      if (!p || p.solved || p.history.length === 0) return state;
-      return updatePuzzle(state, p.id, { value: p.history.at(-1), history: p.history.slice(0, -1), failed: false });
+      if (!p || p.solved || p.history.length === 0 || state.blame?.open) return state;
+      return updatePuzzle(state, p.id, { value: p.history.at(-1), history: p.history.slice(0, -1), by: (p.by ?? []).slice(0, p.history.length - 1), failed: false });
     }
 
     case T.PUZZLE_RESET: {
       const p = state.puzzles[action.puzzleId];
-      if (!p || p.solved) return state;
-      return updatePuzzle(state, p.id, { value: p.start, history: [], failed: false });
+      if (!p || p.solved || state.blame?.open) return state;
+      return updatePuzzle(state, p.id, { value: p.start, history: [], by: [], failed: false });
     }
 
     case T.PUZZLE_ENTER_KEY:

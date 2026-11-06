@@ -11,6 +11,7 @@ const Op = z.object({
   n: z.number().int().min(1).max(15).optional(),
   mask: word.optional(),
   keyed: z.boolean().optional(),
+  hands: z.enum(['player', 'intern', 'both']).optional(),
 });
 
 const Puzzle = z.object({
@@ -22,6 +23,10 @@ const Puzzle = z.object({
   value: word,
   moveLimit: z.number().int().min(1).max(64),
   history: z.array(word).max(64),
+  by: z.array(z.enum(['player', 'intern'])).max(64).optional().default([]),
+  internMoves: z.number().int().min(0).max(64).optional(),
+  noop: z.object({ seq: z.number().int().min(0), op: z.number().int().min(0).max(15), by: z.enum(['player', 'intern']) }).nullable().optional().default(null),
+  solvedBy: z.enum(['player', 'intern']).nullable().optional().default(null),
   unlocked: z.array(z.number().int().min(0).max(15)).max(16).optional().default([]),
   ops: z.array(Op).min(1).max(16),
   playerHides: z.array(z.string().max(16)).max(8).optional(),

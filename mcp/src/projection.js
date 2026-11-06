@@ -10,7 +10,7 @@ import { toBinary, toHex } from '../../game/src/logic/bits.js';
 import { opLabel, parseNumber } from '../../game/src/logic/puzzle.js';
 import { livePuzzles, pathOf } from '../../game/src/core/selectors.js';
 import { generatorSummary, isBitrotPowered, isBrownout, powerConfig, powerLevel, powerStatus } from '../../game/src/core/power.js';
-import { canInternReadFile, canInternUseOp, internLevel, isOpUnlocked, levelInfo } from '../../game/src/core/permissions.js';
+import { canActorUseOp, canInternReadFile, canInternUseOp, internLevel, internOpsLeft, isOpUnlocked, levelInfo, opHands } from '../../game/src/core/permissions.js';
 
 export const BADGE = '#0118';
 const HOURS = (m) => `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
@@ -154,8 +154,16 @@ const opView = (state, p, op, index) => {
     ...(op.type === 'xor' ? { mask: keyedLocked ? null : toHex(op.mask) } : { n: op.n }),
     keyed: Boolean(op.keyed),
     locked: keyedLocked,
-    youCanUse: canInternUseOp(level, op.type),
+    hands: HANDS_TEXT[opHands(op)],
+    youCanUse: canInternUseOp(level, op.type) && canActorUseOp('intern', op),
   };
+};
+
+const HANDS_TEXT = { both: 'either of you', player: 'sysadmin only (NS-02 console)', intern: 'you only (remote line)' };
+
+const remoteLeft = (p) => {
+  const left = internOpsLeft(p);
+  return Number.isFinite(left) ? left : null;
 };
 
 export const puzzleView = (state, p) => ({
@@ -165,7 +173,7 @@ export const puzzleView = (state, p) => ({
   hint: p.hint ?? null,
   current: { hex: toHex(p.value), binary: nibbles(p.value), decimal: p.value },
   target: 'NOT VISIBLE TO YOU. The sysadmin can see it as a pattern of lit squares. Ask them.',
-  moves: { used: p.history.length, limit: p.moveLimit, left: p.moveLimit - p.history.length },
+  moves: { used: p.history.length, limit: p.moveLimit, left: p.moveLimit - p.history.length, yourRemoteOpsLeft: remoteLeft(p), yourRemoteOpsPerAttempt: p.internMoves ?? null },
   trail: [...p.history, p.value].map(toHex),
   ops: p.ops.map((op, i) => opView(state, p, op, i)),
   sysadminSeesNumbers: !(p.playerHides ?? []).includes('hex'),

@@ -71,6 +71,7 @@ export const createTools = (link, { port = link.port } = {}) => {
 
   // Run one allowlisted action in the game and describe the puzzle afterwards.
   const runOp = async (puzzle, opIndex, extra = []) => {
+    const before = link.state.puzzles[puzzle.id].history.length;
     for (const action of [...extra, { type: 'PUZZLE_APPLY_OP', puzzleId: puzzle.id, opIndex }]) {
       const denied = internActionError(link.state, { ...action, actor: 'intern' });
       if (denied) return text(denied);
@@ -79,6 +80,8 @@ export const createTools = (link, { port = link.port } = {}) => {
     }
     const after = view.puzzleView(link.state, link.state.puzzles[puzzle.id]);
     const op = after.ops[opIndex];
+    if (link.state.puzzles[puzzle.id].history.length === before)
+      return text(`NO CHANGE: ${op.label} leaves ${after.current.hex} exactly as it was. No move used. Moves ${after.moves.used}/${after.moves.limit}.`);
     const lines = [`Applied ${op.label}. CURRENT is now ${after.current.hex} (${after.current.binary}). Moves ${after.moves.used}/${after.moves.limit}.`];
     if (after.status === 'RECOVERED') lines.push('SECTOR RECOVERED. Nice work. Tell the sysadmin.');
     else if (after.status.startsWith('OUT')) lines.push('Out of moves. Ask the sysadmin to undo or reset.');
