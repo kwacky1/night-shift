@@ -3,7 +3,7 @@
 // a DRIVE_REPORT to the store four times a second. The 60 Hz sim never touches the store.
 import { actions } from '../core/actions.js';
 import { powerConfig, powerLevel, powerStatus } from '../core/power.js';
-import { chargeStatus } from '../logic/gearStatus.js';
+import { chargeStatus, gradeChanges, lookAhead } from '../logic/gearStatus.js';
 import { advance, chargeBand, createSim, DEFAULT_GEAR_KEYS, forceStall, gradeAt, heightProfile, roadLength, sanitiseGearKeys } from '../logic/gearbox.js';
 
 const KEYS_KEY = 'night-shift:gear-keys';
@@ -299,6 +299,7 @@ export const geargrindView = {
       if (now - c.lastStatus >= 200) {
         c.lastStatus = now;
         const [kind, text] = chargeStatus(cfg, c.sim, c.paused, st);
+        c.statusKind = kind;
         if (statusEl.textContent !== text) statusEl.textContent = text;
         if (statusEl.dataset.charging !== kind) statusEl.dataset.charging = kind;
       }
@@ -406,15 +407,11 @@ const draw = (g, cfg, c, now) => {
   g.fillText(`${Math.round(s.v * 3.6)} km/h`, 44, 10);
   const pct = (gr) => `${gr > 0 ? '+' : ''}${Math.round(gr * 100)}%`;
   g.fillText(`grade ${pct(s.grade)}`, 44, 26);
-  const next = gradeChanges(cfg.road, s.x + 4, s.x + 400)[0];
-  if (next) {
-    const dist = Math.max(0, Math.round((next.x - s.x) / 10) * 10);
-    const steeper = next.grade - gradeAt(cfg.road, s.x);
-    const word = next.grade >= 0.06 ? 'CLIMB' : next.grade <= -0.04 ? 'DESCENT' : 'EASING';
-    const advice = steeper > 0.03 ? 'change down' : steeper < -0.03 ? 'change up' : '';
-    g.fillStyle = Math.abs(steeper) > 0.03 ? gradeColour(next.grade) : '#1d6a35';
-    g.fillText(`${word} ${pct(next.grade)} in ${dist} m`, W - 190, 10);
-    if (advice) g.fillText(`-> ${advice}`, W - 190, 26);
+  const ahead = lookAhead(cfg, s, c.statusKind);
+  if (ahead) {
+    g.fillStyle = Math.abs(ahead.steeper) > 0.03 ? gradeColour(ahead.grade) : '#1d6a35';
+    g.fillText(ahead.text, W - 190, 10);
+    if (ahead.advice) g.fillText(`-> ${ahead.advice}`, W - 190, 26);
   }
   const band = s.running && !s.clutch && s.gear ? chargeBand(cfg, s.rpm) : 0;
   g.fillStyle = band > 0.8 ? '#33ff66' : band > 0.3 ? '#ffb000' : '#6a3c00';
@@ -470,18 +467,3 @@ const draw = (g, cfg, c, now) => {
 
 const gradeColour = (gr) => (gr >= 0.1 ? '#ff7a30' : gr >= 0.05 ? '#ffb000' : gr <= -0.08 ? '#30c8ff' : gr <= -0.03 ? '#80e0ff' : '#33ff66');
 
-// Points ahead where the grade changes noticeably (segment starts), looping with the road.
-const gradeChanges = (road, from, to) => {
-  const total = roadLength(road);
-  const out = [];
-  const segs = road.segments;
-  for (let lap = Math.floor(from / total) * total; lap < to; lap += total) {
-    let pos = lap;
-    segs.forEach((seg, i) => {
-      const prev = segs[(i - 1 + segs.length) % segs.length].grade;
-      if (pos >= from && pos <= to && Math.abs(seg.grade - prev) > 0.03) out.push({ x: pos, grade: seg.grade });
-      pos += seg.length;
-    });
-  }
-  return out;
-};
