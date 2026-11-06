@@ -177,3 +177,63 @@ test('gear key bindings: defaults, saved values, and clashes fall back', () => {
   assert.deepEqual(sanitiseGearKeys({ clutch: 'KeyC', up: 'KeyC', down: 'KeyX' }), DEFAULT_GEAR_KEYS, 'two actions on one key');
   assert.deepEqual(sanitiseGearKeys({ clutch: '<script>' }), DEFAULT_GEAR_KEYS);
 });
+
+const maxGrade = Math.max(...cfg.road.segments.map((s) => s.grade));
+const firstBand = (c, sim, seconds) => {
+  for (let i = 0; i < Math.round(seconds / STEP_DT); i++) {
+    sim = step(sim, {}, STEP_DT, c);
+    if (sim.rpm >= c.sweetBand[0] && wheelRpm(c, 1, sim.v) >= c.sweetBand[0]) return { sim, at: (i + 1) * STEP_DT };
+  }
+  return { sim, at: Infinity };
+};
+
+test('1st gear pulls away from a standstill on the steepest climb, with margin', () => {
+  for (const grade of [maxGrade, maxGrade + 0.03]) {
+    const c = flat(grade);
+    const { sim, at } = firstBand(c, { ...createSim(c), gear: 1 }, 15);
+    assert.ok(!sim.stalled && sim.running, `stalled at ${grade}`);
+    assert.ok(sim.v > 0, `stuck at ${grade}`);
+    assert.ok(at <= (grade === maxGrade ? 10 : 15), `charge band at ${at}s on ${grade}`);
+  }
+});
+
+test('1st slips the clutch at launchRpm, so it never sits at idle', () => {
+  const c = flat(maxGrade);
+  const sim = step({ ...createSim(c), gear: 1 }, {}, STEP_DT, c);
+  assert.equal(sim.rpm, c.launchRpm);
+  assert.ok(sim.v > 0);
+  // Only 1st slips: 2nd from standstill sits at idle and bogs.
+  const { sim: second } = run({ ...createSim(c), gear: 2 }, c.lugStallSeconds + 1, {}, c);
+  assert.ok(second.stalled);
+});
+
+test('a stall on the steepest climb can be recovered: crank, 1st, pull away', () => {
+  const c = flat(maxGrade);
+  let sim = forceStall({ ...createSim(c), gear: 3, v: 0 });
+  ({ sim } = run(sim, c.crankSeconds + 0.1, { clutch: true }, c));
+  assert.ok(sim.running);
+  sim = step(sim, { clutch: true, down: true }, STEP_DT, c);
+  sim = step(sim, { clutch: true, down: true }, STEP_DT, c);
+  assert.equal(sim.gear, 1);
+  const { sim: away, at } = firstBand(c, sim, 15);
+  assert.ok(!away.stalled && away.v > 2, `v ${away.v}`);
+  assert.ok(at < 15);
+});
+
+test('letting a revving engine in from a standstill dumps the clutch for a brief extra shove', () => {
+  const c = flat(maxGrade);
+  const idle = { ...createSim(c), gear: 1 };
+  const { sim: revved } = run(idle, 1.5, { clutch: true }, c);
+  assert.ok(revved.rpm > c.launchRpm);
+  const plain = run(idle, c.dumpSeconds, {}, c).sim;
+  const dumped = run(revved, c.dumpSeconds, {}, c).sim;
+  assert.ok(dumped.v > plain.v * 1.2, `dump ${dumped.v} vs plain ${plain.v}`);
+  assert.ok(!dumped.stalled);
+});
+
+test('validateGearbox checks the launch data', () => {
+  assert.deepEqual(validateGearbox(cfg), []);
+  assert.match(validateGearbox({ ...cfg, launchRpm: cfg.idleRpm - 1 }).join(), /launchRpm/);
+  assert.match(validateGearbox({ ...cfg, launchRpm: cfg.sweetBand[0] }).join(), /launchRpm/);
+  assert.match(validateGearbox({ ...cfg, dumpTorque: 3 }).join(), /dumpTorque/);
+});

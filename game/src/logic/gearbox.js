@@ -4,6 +4,10 @@
 //
 //   engaged     clutch out and in gear: engine rpm follows road speed (rpm = km/h / kmhPer1000 * 1000).
 //               Below idle the clutch slips and holds the engine at idle.
+//   launch      in 1st below launchRpm the clutch slips: the engine holds launchRpm and drives with
+//               that torque, so 1st can always pull away, even from a standstill on the steepest
+//               climb. Releasing the clutch on a free-revving engine dumps it: dumpTorque x the drive
+//               for dumpSeconds while the revs fall back.
 //   lugging     in 2nd or higher below lugRpm: the engine bogs. Too long and it stalls.
 //   limiter     at the redline the limiter cuts drive. Sitting on it too long (or over-revving far past
 //               it, e.g. dropping into 1st at speed) stalls the engine.
@@ -88,6 +92,7 @@ export const createSim = (cfg) => ({
   crank: 0,
   lug: 0,
   overRev: 0,
+  dump: 0,
   grade: gradeAt(cfg.road, 0),
   charge: 0,
   stalls: 0,
@@ -138,16 +143,24 @@ export const step = (sim, input = {}, dt = STEP_DT, cfg) => {
     const gear = cfg.gears[s.gear - 1];
     const wr = wheelRpm(cfg, s.gear, s.v);
     if (wr > cfg.blowRpm) return { ...stall(s, 'over-rev', events), events };
-    s.rpm = Math.max(wr, cfg.idleRpm);
+    // Launch: 1st slips the clutch below launchRpm. Letting a revving engine in dumps the clutch.
+    const launch = s.gear === 1 ? cfg.launchRpm ?? 0 : 0;
+    const slipping = wr < launch;
+    const wasEngaged = sim.running && !sim.clutch && sim.gear > 0;
+    if (slipping && !wasEngaged && sim.running && sim.rpm > launch) s.dump = cfg.dumpSeconds ?? 0;
+    else s.dump = slipping ? Math.max(0, (s.dump ?? 0) - dt) : 0;
+    s.rpm = slipping ? (s.dump > 0 ? Math.max(launch, sim.rpm - cfg.revRate * dt) : launch) : Math.max(wr, cfg.idleRpm);
     s.lug = s.gear > 1 && wr < cfg.lugRpm ? s.lug + dt : Math.max(0, s.lug - dt);
     if (s.lug >= cfg.lugStallSeconds) return { ...stall(s, 'bog', events), events };
     const limiting = s.rpm >= cfg.redline;
     s.overRev = s.rpm >= cfg.redline * 0.98 ? s.overRev + dt : Math.max(0, s.overRev - dt);
     if (s.overRev >= cfg.overRevStallSeconds) return { ...stall(s, 'over-rev', events), events };
-    force = limiting ? 0 : lookup(gear.torque, s.rpm);
-    if (wr >= cfg.idleRpm) charge = chargeBand(cfg, s.rpm) * cfg.chargePerSecond * dt;
+    force = limiting ? 0 : lookup(gear.torque, s.rpm) * (s.dump > 0 ? cfg.dumpTorque ?? 1 : 1);
+    // Slipping, only the road speed counts towards the charge.
+    if (wr >= cfg.idleRpm) charge = chargeBand(cfg, slipping ? wr : s.rpm) * cfg.chargePerSecond * dt;
   } else {
     s.lug = 0;
+    s.dump = 0;
     s.overRev = Math.max(0, s.overRev - dt);
     if (s.running) {
       const towards = cfg.freeRevRpm;
@@ -201,6 +214,9 @@ export const validateGearbox = (cfg) => {
   ['mass', 'gravity', 'drag', 'idleRpm', 'lugRpm', 'redline', 'blowRpm', 'freeRevRpm', 'revRate', 'crankSeconds', 'lugStallSeconds', 'overRevStallSeconds', 'chargePerSecond'].forEach(num);
   if (!(cfg.idleRpm < cfg.lugRpm && cfg.lugRpm < cfg.redline && cfg.redline < cfg.blowRpm)) errors.push('need idleRpm < lugRpm < redline < blowRpm');
   if (cfg.freeRevRpm >= cfg.redline) errors.push('freeRevRpm must be below the redline');
+  if (cfg.launchRpm !== undefined && !(cfg.launchRpm > cfg.idleRpm && cfg.launchRpm < cfg.sweetBand?.[0])) errors.push('launchRpm must sit between idle and the CHARGE ZONE');
+  if (cfg.dumpTorque !== undefined && !(cfg.dumpTorque >= 1 && cfg.dumpTorque <= 2)) errors.push('dumpTorque must be between 1 and 2');
+  if (cfg.dumpSeconds !== undefined && !(cfg.dumpSeconds >= 0 && cfg.dumpSeconds <= 2)) errors.push('dumpSeconds must be between 0 and 2');
   if (!Array.isArray(cfg.sweetBand) || !(cfg.idleRpm < cfg.sweetBand[0] && cfg.sweetBand[0] < cfg.sweetBand[1] && cfg.sweetBand[1] < cfg.redline)) errors.push('sweetBand must sit between idle and redline');
   const cc = cfg.chargeCurve;
   if (cc !== undefined) {
