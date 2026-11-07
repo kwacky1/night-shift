@@ -334,6 +334,10 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
 .ops small { display: block; font-size: 9px; letter-spacing: 1px; color: #555; }
 .ops button.hands-intern { border-style: dashed; }
 .ops button.hands-intern small { color: #06c; }
+.ops button.asked small { color: #808080; }
+.bitrot .next { font: 11px var(--mono); color: #9fd8ae; margin: 4px 0; letter-spacing: 0.5px; }
+.blame-app .without { margin-top: 6px; }
+.blame-app .file-without { font-size: 11px; }
 .ops button.hands-player small { color: #840; }
 .moves .remote { margin-left: auto; color: #6af; }
 .bitrot .banner.noop { display: none; background: var(--amber); color: #000; }
@@ -541,6 +545,13 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
 .gg-controls button.pressed { box-shadow: inset 1px 1px var(--lo), inset -1px -1px var(--hi); }
 .gg-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); z-index: 2; }
 .gg-hint[hidden] { display: none; }
+.gg-parked { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.7); z-index: 3; }
+.gg-parked[hidden] { display: none; }
+.gg-parked .card { max-width: 400px; background: var(--face, #c0c0c0); color: #000; padding: 10px 12px; font-size: 12px; box-shadow: inset -1px -1px #000, inset 1px 1px #fff, 3px 3px 0 rgba(0, 0, 0, 0.4); }
+.gg-parked dl { display: grid; grid-template-columns: auto auto; gap: 2px 10px; margin: 8px 0; }
+.gg-parked dt { font-weight: bold; }
+.gg-parked dd { margin: 0; }
+.gg-parked p { margin: 6px 0 0; }
 .gg-hint .card { max-width: 440px; background: var(--face, #c0c0c0); color: #000; padding: 10px 12px; font-size: 12px; box-shadow: inset -1px -1px #000, inset 1px 1px #fff, 3px 3px 0 rgba(0, 0, 0, 0.4); }
 .gg-hint .card p, .gg-hint .card ul { margin: 6px 0; }
 .gg-hint .card ul { padding-left: 18px; }

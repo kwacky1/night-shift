@@ -154,6 +154,18 @@ export const scriptedBlame = (state) => {
   return { suspect: v.suspect, evidence: v.evidence.filter((ref) => !citeError(state, 'intern', ref)).slice(0, maxEvidence(config)), statement: v.statement };
 };
 
+// Should the scripted intern file #0118's statement now? 'file', 'wait' (a real intern is on the
+// line: wait for it however long it takes) or null (nothing to do). forced = the sysadmin pressed
+// FILE WITHOUT THE INTERN. If the real intern drops off the line, aiOnLine goes false and the
+// scripted intern files as usual once the sysadmin has.
+export const scriptedBlameDecision = (state, { aiOnLine = false, forced = false } = {}) => {
+  const b = state.blame;
+  if (!b?.open || !b.config || b.intern) return null;
+  if (forced) return 'file';
+  if (!b.player) return null;
+  return aiOnLine ? 'wait' : 'file';
+};
+
 // ---- endings found (kept in localStorage, outside the save) --------------------------------
 
 export const ENDINGS_KEY = 'night-shift:endings';

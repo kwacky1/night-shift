@@ -17,7 +17,7 @@ const refLabel = (state, ref) => {
   return `${state.files[id]?.name ?? id}:${line}`;
 };
 
-const paint = (body, state, win) => {
+const paint = (body, state, win, ctx) => {
   const b = state.blame;
   const root = body.querySelector('.blame-app');
   if (!b?.config) {
@@ -31,9 +31,11 @@ const paint = (body, state, win) => {
   if (!files.some((f) => f.id === draft.fileId)) draft.fileId = files[0]?.id ?? null;
   const file = files.find((f) => f.id === draft.fileId);
   const max = maxEvidence(config);
-  const internLine = b.intern ? '#0118: statement filed.' : '#0118: thinking about it.';
+  const aiOnLine = Boolean(ctx?.blame?.aiOnLine?.());
+  const internLine = b.intern ? '#0118: statement filed.' : aiOnLine ? 'WAITING FOR #0118...' : '#0118: thinking about it.';
 
-  root.querySelector('.status').textContent = !b.open ? 'Audit closed.' : filed ? `Your statement is filed. ${internLine} Waiting for Head Office.` : internLine;
+  root.querySelector('.status').textContent = !b.open ? 'Audit closed.' : filed ? `Your statement is filed. ${internLine}${b.intern ? ' Waiting for Head Office.' : ''}` : internLine;
+  root.querySelector('.without').hidden = !(b.open && aiOnLine && !b.intern);
   const form = root.querySelector('.blame-form');
   form.hidden = Boolean(filed) || !b.open;
   const done = root.querySelector('.blame-filed');
@@ -83,8 +85,9 @@ export const blameView = {
           <div class="actions"><button type="submit" class="file-statement">File statement</button></div>
         </form>
         <div class="blame-filed" hidden></div>
+        <div class="without" hidden><button type="button" class="file-without" title="The scripted intern files #0118's statement now. The one on the line doesn't get a say.">FILE WITHOUT THE INTERN</button></div>
       </div>`;
-    const redraw = () => paint(body, ctx.getState(), win);
+    const redraw = () => paint(body, ctx.getState(), win, ctx);
     body.addEventListener('change', (e) => {
       const draft = draftFor(win);
       if (e.target.name === 'suspect') draft.suspect = e.target.value;
@@ -93,6 +96,10 @@ export const blameView = {
       redraw();
     });
     body.addEventListener('click', (e) => {
+      if (e.target.closest('.file-without')) {
+        ctx.blame?.fileWithoutIntern?.();
+        return;
+      }
       const hit = e.target.closest('[data-ref]');
       if (!hit) return;
       const draft = draftFor(win);
@@ -110,8 +117,8 @@ export const blameView = {
     });
   },
 
-  render(body, state, prev, win) {
+  render(body, state, prev, win, ctx) {
     if (prev && prev.blame === state.blame && prev.files === state.files) return;
-    paint(body, state, win);
+    paint(body, state, win, ctx);
   },
 };

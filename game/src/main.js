@@ -18,7 +18,8 @@ import { startRename } from './ui/rename.js';
 import { renderShiftEnd } from './ui/shiftend.js';
 import { geargrindView } from './ui/geargrind.js';
 import { blameView } from './ui/blame.js';
-import { addEnding, ENDINGS_KEY, parseEndings, scriptedBlame } from './core/blame.js';
+import { addEnding, ENDINGS_KEY, parseEndings, scriptedBlame, scriptedBlameDecision } from './core/blame.js';
+import { askKey, askPending } from './core/permissions.js';
 import { powerStatus } from './core/power.js';
 import { connectIntern, exposeApi, isLocalSocketUrl } from './bridge/api.js';
 import { fallbackAsk, fallbackNag, fallbackReply } from './intern/fallback.js';
@@ -32,7 +33,6 @@ const SAVE_THROTTLE_MS = 500;
 // The scripted intern files its audit statement this long after the sysadmin when nobody's on the
 // line, or this long after 06:00 if an AI intern is on the line but hasn't filed.
 const SCRIPTED_BLAME_MS = 2000;
-const AI_BLAME_GRACE_MS = 90_000;
 
 const loadJson = async (path) => {
   const res = await fetch(new URL(path, import.meta.url));
@@ -119,7 +119,12 @@ const boot = async () => {
     ui.internDriver = driver;
     ui.internWarning = warning;
     ctx.rerender();
+    // A real intern that drops off the line mid-audit hands back to the scripted one.
+    setTimeout(() => scriptedBlameCheck(), 0);
   };
+  const aiOnLine = () => ui.internStatus === 'online' || ui.internStatus === 'taken';
+  // Remote-only ops already asked for, so a second click doesn't nag the intern again.
+  const asks = new Map();
 
   const ctx = {
     dispatch: store.dispatch,
@@ -134,6 +139,12 @@ const boot = async () => {
     newShift: () => store.dispatch(actions.newShift(createInitialState(data))),
     // Endings found across every shift. Kept apart from the save, so a new game keeps them.
     endings: () => ({ found: loadEndings(), all: blame.endings.map(({ id, title }) => ({ id, title })) }),
+    blame: {
+      aiOnLine,
+      waiting: () => scriptedBlameDecision(store.getState(), { aiOnLine: aiOnLine() }) === 'wait',
+      // FILE WITHOUT THE INTERN: the scripted intern files now, even with a real one on the line.
+      fileWithoutIntern: () => scriptedBlameCheck(true),
+    },
     intern: {
       url: () => bridge?.url ?? savedUrl() ?? DEFAULT_INTERN_URL,
       dial: (url, { quiet = false } = {}) => {
@@ -151,9 +162,13 @@ const boot = async () => {
         const state = store.getState();
         const op = state.puzzles[puzzleId]?.ops[opIndex];
         if (!op || state.phase !== 'desktop') return;
-        if (ui.internStatus === 'online' || ui.internStatus === 'taken') {
+        if (aiOnLine()) {
+          const p = state.puzzles[puzzleId];
+          if (askPending(asks, p, opIndex, Date.now())) return;
+          asks.set(askKey(puzzleId, opIndex), { moves: p.history.length, at: Date.now() });
           const where = Object.values(state.files).find((f) => f.puzzleId === puzzleId)?.name ?? puzzleId;
           store.dispatch(actions.chatSend(`#0118, can you run ${opLabel(op)} on ${where}? It's on your side of the line.`));
+          ctx.rerender();
           return;
         }
         ui.internTyping = true;
@@ -166,6 +181,7 @@ const boot = async () => {
           else ctx.rerender();
         }, 600 + Math.random() * 600);
       },
+      asked: (puzzle, opIndex) => aiOnLine() && askPending(asks, puzzle, opIndex, Date.now()),
       hangUp: () => {
         bridge?.close();
         bridge = null;
@@ -194,7 +210,6 @@ const boot = async () => {
   window.addEventListener('pagehide', () => saveTimer && saveNow());
   store.subscribe((state, prev, action) => {
     if (state.phase === 'over' && prev.phase !== 'over' && state.shiftEnd?.ending) saveEnding(state.shiftEnd.ending.id);
-    if (state.blame?.open && !prev.blame?.open) auditOpenedAt = Date.now();
     render(state, prev);
     scriptedBlameCheck();
     if (action.type === ActionTypes.CHAT_SEND && !action.actor && action.from !== 'intern') scriptedIntern(action.text);
@@ -238,21 +253,19 @@ const boot = async () => {
     }
   };
 
-  // The audit: if no AI files a statement, the scripted intern does (it blames you, naturally).
-  let auditOpenedAt = store.getState().blame?.open ? Date.now() : 0;
+  // The audit: with no real intern on the line, the scripted one files after the sysadmin (it blames
+  // you, naturally). A real intern is waited for however long it takes, unless the sysadmin presses
+  // FILE WITHOUT THE INTERN.
   let blameTimer = null;
-  const scriptedBlameCheck = () => {
-    const b = store.getState().blame;
-    if (!b?.open || !b.player || b.intern || blameTimer) return;
-    const aiOnLine = ui.internStatus === 'online' || ui.internStatus === 'taken';
-    if (aiOnLine && Date.now() - auditOpenedAt < AI_BLAME_GRACE_MS) return;
+  const scriptedBlameCheck = (forced = false) => {
+    if (blameTimer || scriptedBlameDecision(store.getState(), { aiOnLine: aiOnLine(), forced }) !== 'file') return;
     ui.internTyping = true;
     ctx.rerender();
     blameTimer = setTimeout(() => {
       blameTimer = null;
       ui.internTyping = false;
       const s = store.getState();
-      if (!s.blame?.open || s.blame.intern) return ctx.rerender();
+      if (scriptedBlameDecision(s, { aiOnLine: aiOnLine(), forced }) !== 'file') return ctx.rerender();
       const pick = scriptedBlame(s);
       if (pick) store.dispatch({ ...actions.blameSubmit(pick.suspect, pick.evidence, pick.statement), actor: 'intern', scripted: true });
     }, SCRIPTED_BLAME_MS);

@@ -3,6 +3,8 @@
 // a DRIVE_REPORT to the store four times a second. The 60 Hz sim never touches the store.
 import { actions } from '../core/actions.js';
 import { powerConfig, powerLevel, powerStatus } from '../core/power.js';
+import { generatorWrapUp } from '../core/shift.js';
+import { esc } from './dom.js';
 import { chargeStatus, FLASHES, gradeChanges, lookAhead, overlayStatus, wrapText } from '../logic/gearStatus.js';
 import { advance, chargeBand, createSim, DEFAULT_GEAR_KEYS, forceStall, gradeAt, heightProfile, roadLength, sanitiseGearKeys } from '../logic/gearbox.js';
 
@@ -83,6 +85,7 @@ export const geargrindView = {
           <button type="button" data-ctl="help" title="How to drive">?</button>
         </div>
         <div class="gg-help">Throttle is stuck open. Hold the clutch and tap up/down to change gear. Stalled? Hold the clutch to restart.</div>
+        <div class="gg-parked" hidden role="status"></div>
         <div class="gg-hint" hidden>
           <div class="card">
             <b>GENERATOR 2: HOW TO CHARGE THE MAINFRAME</b>
@@ -163,7 +166,7 @@ export const geargrindView = {
 
     const focused = () => {
       const st = ctx.getState();
-      return st.focusedWindowId === win.id && st.phase === 'desktop' && !st.alert;
+      return st.focusedWindowId === win.id && st.phase === 'desktop' && !st.alert && !st.blame?.open;
     };
     const isGearKey = (code) => code === c.keys.clutch || code === c.keys.up || code === c.keys.down;
     const onKeyDown = (e) => {
@@ -217,13 +220,14 @@ export const geargrindView = {
 
     const clutchBtn = body.querySelector('[data-ctl="clutch"]');
     clutchBtn.addEventListener('pointerdown', (e) => {
+      if (c.parked) return;
       c.clutchMouse = true;
       clutchBtn.setPointerCapture?.(e.pointerId);
     });
     for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) clutchBtn.addEventListener(ev, () => (c.clutchMouse = false));
     body.querySelector('.gg-controls').addEventListener('click', (e) => {
       const ctl = e.target.closest('button')?.dataset.ctl;
-      if (ctl === 'up' || ctl === 'down') c.pending[ctl] = true;
+      if (ctl === 'up' || ctl === 'down') !c.parked && (c.pending[ctl] = true);
       else if (ctl === 'audio') {
         if (c.audio) {
           c.audio.close();
@@ -272,7 +276,7 @@ export const geargrindView = {
       const dt = (now - c.last) / 1000;
       c.last = now;
       const st = ctx.getState();
-      c.paused = st.phase !== 'desktop' || !!st.alert || document.hidden || !!body.closest('.window')?.hidden || !hint.hidden;
+      c.paused = c.parked || st.phase !== 'desktop' || !!st.alert || document.hidden || !!body.closest('.window')?.hidden || !hint.hidden;
       const clutch = c.clutchKey || c.clutchMouse;
       if (!c.paused) {
         const before = c.sim;
@@ -324,10 +328,11 @@ export const geargrindView = {
     const c = controllers.get(win.id);
     // Focused from anywhere (taskbar, opening it, a click): take the keyboard.
     if (c && state.focusedWindowId === win.id && prev?.focusedWindowId !== win.id) queueMicrotask(() => c.grab?.());
+    if (c) park(body, state, c);
     const seq = state.power?.stallSeq ?? 0;
     if (c && seq !== c.stallSeq) {
       c.stallSeq = seq;
-      if (c.sim.running) {
+      if (c.sim.running && !c.parked) {
         c.sim = forceStall(c.sim, 'surge');
         c.acc.stalls++;
         c.flash = { text: FLASHES.stall('surge'), until: performance.now() + 2500 };
@@ -340,6 +345,26 @@ export const geargrindView = {
     body.querySelector('.gg-power').dataset.status = powerStatus(state);
     body.querySelector('.gg-power .pct').textContent = `${Math.ceil(level)}%`;
   },
+};
+
+// 06:00 audit: Generator 2 is parked for the day crew. The car stops, controls go dead and a
+// wrap-up card points at BLAME.EXE.
+const park = (body, state, c) => {
+  const parked = Boolean(state.blame?.open);
+  if (parked === Boolean(c.parked)) return;
+  c.parked = parked;
+  const card = body.querySelector('.gg-parked');
+  body.querySelectorAll('.gg-controls [data-ctl="up"], .gg-controls [data-ctl="down"], .gg-controls [data-ctl="clutch"]').forEach((b) => (b.disabled = parked));
+  card.hidden = !parked;
+  if (!parked) return;
+  c.sim = { ...c.sim, running: false, stalled: false, gear: 0, rpm: 0 };
+  c.clutchKey = c.clutchMouse = false;
+  c.pending = { up: false, down: false };
+  c.acc = { charge: 0, distance: 0, stalls: 0 };
+  const w = generatorWrapUp(state);
+  card.innerHTML = `<div class="card"><b>${esc(w.title)}</b>
+    <dl><dt>DRIVEN</dt><dd>${esc(w.distanceKm)} km</dd><dt>STALLS</dt><dd>${esc(w.stalls)}</dd><dt>LOWEST MAINFRAME POWER</dt><dd>${esc(w.lowestPower)}%</dd></dl>
+    <p>${esc(w.pointer)}</p></div>`;
 };
 
 const draw = (g, cfg, c, now) => {

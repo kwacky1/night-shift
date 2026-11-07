@@ -333,6 +333,21 @@ test('audit: audit_status shows suspects and read files, never the verdict rules
   assert.ok(!JSON.stringify(link.state.blame).match(/points|endings|scripted/), 'the schema strips the verdict config');
 });
 
+test('audit: opening it pings #0118 in read_messages and on every tool result until it files', async () => {
+  const store = auditStore();
+  await connectGame(store);
+  const msgs = await call('read_messages');
+  assert.match(msgs.text, /SYSTEM: 06:00 AUDIT OPEN\. #0118: file with submit_blame/);
+  assert.match(msgs.text, /HEAD OFFICE: 06:00 AUDIT OPEN/);
+  assert.match((await call('whoami')).text, /HEAD OFFICE: 06:00 AUDIT OPEN\. File your statement with submit_blame/);
+  assert.doesNotMatch((await call('audit_status')).text, /HEAD OFFICE: 06:00/);
+  assert.match((await call('read_messages')).text, /No new messages/, 'the ping is read once');
+  const filed = await call('submit_blame', { suspect: '0117' });
+  assert.doesNotMatch(filed.text, /HEAD OFFICE: 06:00 AUDIT OPEN/);
+  await waitFor(() => link.state?.blame?.intern || link.state?.shiftEnd);
+  assert.doesNotMatch((await call('read_messages', { all: true })).text, /\(HEAD OFFICE: 06:00/);
+});
+
 test('audit: citations must be files the intern has read, and the verdict comes back', async () => {
   const store = auditStore();
   await connectGame(store);

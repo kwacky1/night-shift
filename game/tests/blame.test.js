@@ -6,8 +6,10 @@ import { reducer } from '../src/core/reducer.js';
 import { actions } from '../src/core/actions.js';
 import { createInitialState, STATE_VERSION } from '../src/core/initialState.js';
 import { shiftMinutes } from '../src/core/story.js';
+import { generatorWrapUp } from '../src/core/shift.js';
 import { migrateSave } from '../src/core/save.js';
-import { addEnding, citableFiles, checkSubmission, parseEndings, scoreBlame, scriptedBlame, validateBlame } from '../src/core/blame.js';
+import { addEnding, citableFiles, checkSubmission, parseEndings, scoreBlame, scriptedBlame, scriptedBlameDecision, validateBlame } from '../src/core/blame.js';
+import { AUDIT_PING } from '../src/core/reducer.js';
 
 const load = async (name) => JSON.parse(await readFile(new URL(`../data/${name}`, import.meta.url), 'utf8'));
 const files = await load('files.json');
@@ -197,4 +199,59 @@ test('saves: a v4 save mid-audit stays in the audit; a v3 save picks up the new 
   assert.equal(up.blame.open, false);
   assert.equal(up.stats.playerOps, 0);
   assert.deepEqual(up.story.fired, v3.story.fired);
+});
+
+test('opening the audit pings #0118 on the line', () => {
+  const s = audit();
+  const ping = s.intern.messages.filter((m) => m.ping);
+  assert.equal(ping.length, 1);
+  assert.equal(ping[0].from, 'system');
+  assert.equal(ping[0].text, AUDIT_PING);
+  assert.match(ping[0].text, /AUDIT OPEN.*submit_blame.*audit_status/);
+});
+
+test('the scripted intern never files over an AI on the line', () => {
+  const s = audit();
+  assert.equal(scriptedBlameDecision(desktop(), { aiOnLine: false }), null, 'no audit, no statement');
+  assert.equal(scriptedBlameDecision(s, { aiOnLine: false }), null, 'waits for the sysadmin to file first');
+  assert.equal(scriptedBlameDecision(s, { aiOnLine: true }), null);
+  const filed = reducer(s, player('0117'));
+  assert.equal(scriptedBlameDecision(filed, { aiOnLine: true }), 'wait', 'AI online: WAITING FOR #0118, however long');
+  assert.equal(scriptedBlameDecision(filed, { aiOnLine: false }), 'file', 'no AI (or it disconnected): the scripted statement');
+  assert.equal(scriptedBlameDecision(filed, { aiOnLine: true, forced: true }), 'file', 'FILE WITHOUT THE INTERN');
+  assert.equal(scriptedBlameDecision(s, { aiOnLine: true, forced: true }), 'file', 'the button works before you file too');
+  const done = reducer(filed, intern('sysadmin'));
+  assert.equal(scriptedBlameDecision(done, { aiOnLine: false, forced: true }), null, 'one statement each');
+});
+
+test('FILE WITHOUT THE INTERN files a statement marked scripted', () => {
+  const s = reducer(audit(), player('0117'));
+  assert.equal(scriptedBlameDecision(s, { aiOnLine: true, forced: true }), 'file');
+  const pick = scriptedBlame(s);
+  const end = reducer(s, { ...actions.blameSubmit(pick.suspect, pick.evidence, pick.statement), actor: 'intern', scripted: true });
+  assert.equal(end.blame.intern.scripted, true);
+  assert.ok(end.shiftEnd);
+});
+
+test('06:00: the audit parks Generator 2 and clears a stall; no drain, stalls or driving after that', () => {
+  let s = at(desktop(), '05:00');
+  s = reducer(s, actions.driveReport({ charge: 2, distance: 900, stalls: 1, stalled: true, gear: 0 }));
+  s = { ...s, power: { ...s.power, level: 40, lowest: 22 } };
+  assert.equal(s.power.generator.stalled, true);
+  s = at(s, '06:00');
+  assert.equal(s.blame.open, true);
+  assert.deepEqual(s.power.generator, { running: false, stalled: false, gear: 0, rpm: 0 }, 'parked, stall cleared');
+  assert.equal(s.focusedWindowId, s.windows.find((w) => w.kind === 'blame')?.id, 'BLAME.EXE is in front');
+  s = { ...s, power: { ...s.power, config: { ...s.power.config, drainPerMinute: 5 } } };
+  const level = s.power.level;
+  assert.equal(reducer(s, actions.tick(30)), s, 'no drain while the clock is frozen');
+  assert.equal(reducer(s, actions.driveReport({ charge: 5, distance: 900, stalls: 2, running: true, stalled: true, gear: 3, rpm: 5000 })), s, 'no gear input during the audit');
+  assert.equal(s.power.level, level);
+
+  const card = generatorWrapUp(s);
+  assert.equal(card.title, '06:00. DAY CREW HAS THE GENERATOR.');
+  assert.match(card.pointer, /BLAME\.EXE/);
+  const end = verdict(s, player('0117'), intern('sysadmin')).shiftEnd.summary;
+  assert.deepEqual({ distanceKm: card.distanceKm, stalls: card.stalls, lowestPower: card.lowestPower }, { distanceKm: end.distanceKm, stalls: end.stalls, lowestPower: end.lowestPower }, 'the card matches the end screen');
+  assert.deepEqual([card.distanceKm, card.stalls], [0.9, 1]);
 });

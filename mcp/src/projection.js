@@ -221,7 +221,7 @@ export const citePath = (state, ref) => {
 
 // Ghost posts arrive on the line as #0117. Nobody has explained that to the intern either.
 const SPEAKERS = { player: 'player', intern: 'intern', system: 'system', ghost: '#0117' };
-export const chat = (state) => state.intern.messages.map((m) => ({ id: m.id, at: m.at, from: SPEAKERS[m.from] ?? m.from, text: m.text }));
+export const chat = (state) => state.intern.messages.map((m) => ({ id: m.id, at: m.at, from: SPEAKERS[m.from] ?? m.from, text: m.text, ...(m.ping ? { ping: true } : {}) }));
 
 export const parseMask = (value) => {
   const n = parseNumber(String(value ?? '').trim());

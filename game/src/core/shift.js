@@ -29,6 +29,14 @@ export const shiftSummary = (state) => {
   };
 };
 
+// 06:00 audit: the day crew take Generator 2. GEARGRIND.EXE shows this card; the figures are the
+// end screen's (driving stops with the audit, so they can't drift before the verdict).
+export const GENERATOR_PARKED = { title: '06:00. DAY CREW HAS THE GENERATOR.', pointer: 'Head Office is waiting in BLAME.EXE.' };
+export const generatorWrapUp = (state) => {
+  const { distanceKm, stalls, lowestPower } = shiftSummary(state);
+  return { ...GENERATOR_PARKED, distanceKm, stalls, lowestPower };
+};
+
 // extra: anything to keep with the end (the audit passes its ending).
 export const endShift = (state, reason, extra = {}) => {
   if (state.phase === 'over') return state;

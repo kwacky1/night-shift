@@ -137,12 +137,17 @@ const renameFile = (state, { id, name }) => {
 // 06:00 with BLAME.EXE on the desktop: the clock stops, NS-02 freezes and the audit opens.
 const startAudit = (state) => {
   const fileId = state.blame.config.file ?? 'blame';
-  let s = { ...state, blame: { ...state.blame, open: true }, alert: null };
+  // The day crew take Generator 2: no driving, draining or stalling during the audit.
+  const generator = { running: false, stalled: false, gear: 0, rpm: 0 };
+  let s = { ...state, blame: { ...state.blame, open: true }, power: { ...state.power, generator }, alert: null };
   s = updateFile(s, fileId, { locked: false });
-  s = log(s, 'Head Office audit. NS-02 frozen. BLAME.EXE running.');
+  s = log(s, 'Head Office audit. NS-02 frozen. Generator 2 parked for the day crew. BLAME.EXE running.');
   s = post(s, 'system', 'Head Office: 06:00. NS-02 is frozen for the audit. BLAME.EXE is open. The sysadmin and #0118 each file one statement: who did it, the file:line evidence, and why.');
+  s = post(s, 'system', AUDIT_PING, { ping: true });
   return openFile(s, fileId);
 };
+
+export const AUDIT_PING = '06:00 AUDIT OPEN. #0118: file with submit_blame. audit_status has the suspects and your citable files.';
 
 const SIDE_NAMES = { player: 'The sysadmin', intern: '#0118' };
 
@@ -312,7 +317,7 @@ const baseReducer = (state, action) => {
     }
 
     case T.DRIVE_REPORT:
-      if (state.phase !== 'desktop') return state;
+      if (state.phase !== 'desktop' || state.blame?.open) return state;
       return driveReport(state, action);
 
     case T.OPEN_FILE:

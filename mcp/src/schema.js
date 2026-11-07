@@ -56,6 +56,7 @@ const Message = z.object({
   at: z.string().max(8),
   text: z.string().max(1000),
   scripted: z.boolean().optional(),
+  ping: z.boolean().optional(),
 });
 
 const level = z.number().min(0).max(100);

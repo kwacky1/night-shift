@@ -30,17 +30,20 @@ export const outdatedDriverText = (mismatch) =>
     'Restart night-shift-mcp from the same checkout as the game (or update it), then ask the sysadmin to Redial in INTERN.EXE.',
   ].join('\n');
 
+export const AUDIT_NAG = '\n\n(HEAD OFFICE: 06:00 AUDIT OPEN. File your statement with submit_blame. audit_status has the suspects and your citable files.)';
 const lineNoise = (reason) => `\n\n(LINE NOISE: the game's last update could not be read: ${reason}. What you see may be stale. The driver may be out of date.)`;
 
 export const createTools = (link, { port = link.port } = {}) => {
   // read_messages cursor: the highest player message id the agent has already been shown.
   let seenId = 0;
 
-  const withGame = (fn, { needsDesktop = true } = {}) => async (args = {}) => {
+  const withGame = (fn, { needsDesktop = true, auditNag = true } = {}) => async (args = {}) => {
     const state = link.state;
     if (!link.connected || !state) return text(link.mismatch ? outdatedDriverText(link.mismatch) : notConnectedText(port));
     const res = await guarded(fn, state, args, needsDesktop);
     if (link.lastRejection && res?.content?.[0]?.type === 'text') res.content[0].text += lineNoise(link.lastRejection);
+    const now = link.state ?? state;
+    if (auditNag && now.blame?.open && !now.blame.intern && !now.shiftEnd && res?.content?.[0]?.type === 'text') res.content[0].text += AUDIT_NAG;
     return res;
   };
 
@@ -87,11 +90,12 @@ export const createTools = (link, { port = link.port } = {}) => {
     }
   };
 
+  // The 06:00 audit ping wakes read_messages/wait_for_player like a player message does.
   const unreadPlayerMessages = (state) => {
     const msgs = view.chat(state);
     const maxId = msgs.at(-1)?.id ?? 0;
     if (maxId < seenId) seenId = 0; // the game was reset
-    return msgs.filter((m) => m.from === 'player' && m.id > seenId);
+    return msgs.filter((m) => (m.from === 'player' || m.ping) && m.id > seenId);
   };
 
   const formatMessages = (msgs) => msgs.map((m) => `[${m.at}] ${m.from === 'player' ? 'SYSADMIN' : m.from === 'intern' ? 'YOU (#0118)' : m.from === '#0117' ? '#0117' : 'SYSTEM'}: ${m.text}`).join('\n');
@@ -269,7 +273,7 @@ export const createTools = (link, { port = link.port } = {}) => {
       handler: withGame(async (state) => {
         const audit = view.auditView(state, readSet(state));
         return audit ? json('BLAME.EXE', audit) : text('There is no audit running. Head Office will announce it.');
-      }),
+      }, { auditNag: false }),
     },
     {
       name: 'submit_blame',
@@ -302,7 +306,7 @@ export const createTools = (link, { port = link.port } = {}) => {
         if (!res.ok) return text(`The game refused: ${res.error}`);
         if (link.state.phase === 'over') return text(`Statement filed. Both statements are in.\n${view.shiftOverText(link.state)}`);
         return text('Statement filed with Head Office. The verdict comes once the sysadmin files theirs. (wait_for_player while you wait)');
-      }),
+      }, { auditNag: false }),
     },
     {
       name: 'message_player',
