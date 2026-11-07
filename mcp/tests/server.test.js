@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { parseArgs, INSTRUCTIONS } from '../src/server.js';
+import { readFileSync } from 'node:fs';
+import { parseArgs, INSTRUCTIONS, VERSION } from '../src/server.js';
 
 const BIN = fileURLToPath(new URL('../bin/night-shift-mcp.js', import.meta.url));
 
@@ -15,6 +16,10 @@ test('parseArgs reads flags and env', () => {
   assert.deepEqual(parseArgs(['--allow-origin', 'https://a.example', '--allow-origin=https://b.example'], {}).allowOrigins, ['https://a.example', 'https://b.example']);
   assert.throws(() => parseArgs(['--port', 'nope'], {}), /Port/);
   assert.throws(() => parseArgs(['--rm-rf'], {}), /Unknown option/);
+});
+
+test('the server reports the npm package version', () => {
+  assert.equal(VERSION, JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version);
 });
 
 test('the persona does not spoil solutions', () => {

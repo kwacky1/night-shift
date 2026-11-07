@@ -4,6 +4,8 @@
 //
 //   npm run smoke            (from the repo root)
 //   CHROME_PATH=... npm run smoke   if Chrome is not in a standard location
+//   SMOKE_MCP_BIN=...               run another night-shift-mcp bin (npm run verify-pack uses the packed one)
+//   SMOKE_GAME_ROOT=dist/html       play the itch.io build instead of game/
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +17,7 @@ const HTTP_PORT = Number(process.env.SMOKE_HTTP_PORT) || 8097;
 const WS_PORT = Number(process.env.SMOKE_WS_PORT) || 7118;
 const root = (p) => fileURLToPath(new URL(`../../${p}`, import.meta.url));
 const SHOTS = process.env.SMOKE_SHOTS ?? root('.playwright-mcp');
+const MCP_BIN = process.env.SMOKE_MCP_BIN || root('mcp/bin/night-shift-mcp.js');
 
 const chromePath = () =>
   [
@@ -36,14 +39,14 @@ const expect = (cond, msg, detail = '') => {
 
 const cleanup = [];
 const run = async () => {
-  const serve = spawn(process.execPath, [root('scripts/serve.js')], { env: { ...process.env, PORT: String(HTTP_PORT) }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const serve = spawn(process.execPath, [root('scripts/serve.js')], { env: { ...process.env, PORT: String(HTTP_PORT), ...(process.env.SMOKE_GAME_ROOT && { SERVE_ROOT: process.env.SMOKE_GAME_ROOT }) }, stdio: ['ignore', 'pipe', 'inherit'] });
   cleanup.push(() => serve.kill());
   await new Promise((resolve, reject) => {
     serve.stdout.once('data', resolve);
     serve.once('exit', (code) => reject(new Error(`static server exited (${code})`)));
   });
 
-  const transport = new StdioClientTransport({ command: process.execPath, args: [root('mcp/bin/night-shift-mcp.js'), '--port', String(WS_PORT)], stderr: 'inherit' });
+  const transport = new StdioClientTransport({ command: process.execPath, args: [MCP_BIN, '--port', String(WS_PORT)], stderr: 'inherit' });
   const client = new Client({ name: 'night-shift-smoke', version: '0.0.0' });
   await client.connect(transport);
   cleanup.push(() => client.close());
@@ -54,6 +57,7 @@ const run = async () => {
     return text;
   };
 
+  console.log(`# night-shift-mcp: ${MCP_BIN}`);
   expect(/intern #0118/.test(client.getInstructions()), 'MCP server exposes the intern persona');
   expect(/NO CARRIER/.test(await tool('whoami')), 'tools answer in character before the game connects');
 

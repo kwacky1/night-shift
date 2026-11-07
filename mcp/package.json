@@ -2,16 +2,42 @@
   "name": "night-shift-mcp",
   "version": "0.2.0",
   "description": "MCP server that lets an AI agent play the intern in NIGHT_SHIFT.EXE",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "game",
+    "game-off",
+    "game-off-2026",
+    "ai-agent",
+    "retro"
+  ],
+  "homepage": "https://github.com/kwacky1/night-shift#connect-your-intern",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kwacky1/night-shift.git",
+    "directory": "mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/kwacky1/night-shift/issues"
+  },
   "type": "module",
   "license": "MIT",
   "bin": {
     "night-shift-mcp": "bin/night-shift-mcp.js"
   },
-  "main": "src/server.js",
+  "main": "dist/server.js",
+  "files": [
+    "bin",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "node bin/night-shift-mcp.js",
     "test": "node --test tests/",
-    "smoke": "node scripts/smoke.js"
+    "smoke": "node scripts/smoke.js",
+    "bundle": "node scripts/bundle.js",
+    "prepack": "node scripts/bundle.js"
   },
   "engines": {
     "node": ">=20"
@@ -22,6 +48,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "playwright-core": "^1.64.1"
   }
 }
