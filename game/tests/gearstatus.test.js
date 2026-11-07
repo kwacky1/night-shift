@@ -68,7 +68,8 @@ test('look-ahead only advises when moving, the zone is fine and the gear can go 
   const { climb, descent, at } = onRoad({});
   const mid = (cfg.sweetBand[0] + cfg.sweetBand[1]) / 2;
   const go = (c, gear, kmh) => lookAhead(cfg, { ...at(c), gear, v: kmh / 3.6, rpm: mid }, 'yes');
-  assert.match(go(climb, 3, 50).text, /^CLIMB \+\d+% in \d+ m$/);
+  assert.match(go(climb, 3, 50).text, /^\d+% CLIMB IN \d+ m$/);
+  assert.match(go(descent, 3, 50).text, /^\d+% DESCENT IN \d+ m$/, 'no sign: the slope starts there');
   assert.equal(go(climb, 3, 50).advice, 'change down soon');
   assert.equal(go(climb, 1, 20).advice, '');
   assert.equal(go(descent, 3, 50).advice, 'change up soon');
@@ -147,7 +148,7 @@ test('every overlay and flash fits across the road', () => {
 });
 
 test('wrapText breaks on words, never exceeds the width, and splits words that cannot fit', () => {
-  assert.deepEqual(wrapText('CLIMB +8% in 280 m', 24), ['CLIMB +8% in 280 m']);
+  assert.deepEqual(wrapText('8% CLIMB IN 280 m', 24), ['8% CLIMB IN 280 m']);
   assert.deepEqual(wrapText('-> change up as the revs rise', 16), ['-> change up as', 'the revs rise']);
   assert.deepEqual(wrapText('ABCDEFGHIJ', 4), ['ABCD', 'EFGH', 'IJ']);
   assert.deepEqual(wrapText('', 10), []);

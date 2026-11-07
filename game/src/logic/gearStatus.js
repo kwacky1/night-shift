@@ -111,12 +111,14 @@ export const lookAhead = (cfg, sim, statusKind, range = 400) => {
   const dist = Math.max(0, Math.round((next.x - sim.x) / 10) * 10);
   const steeper = next.grade - gradeAt(cfg.road, sim.x);
   const word = next.grade >= 0.06 ? 'CLIMB' : next.grade <= -0.04 ? 'DESCENT' : steeper > 0 ? 'RISE' : 'EASING';
-  const pct = `${next.grade > 0 ? '+' : ''}${Math.round(next.grade * 100)}%`;
+  // "8% CLIMB IN 60 m": an 8% slope starts 60 m ahead (not +8% over 60 m), so no sign.
+  const pct = `${Math.abs(Math.round(next.grade * 100))}%`;
+  const what = word === 'EASING' ? `EASING TO ${pct}` : `${pct} ${word}`;
   let advice = '';
   const moving = sim.running && sim.gear > 0 && sim.v * 3.6 >= CRAWL_KMH;
   if (statusKind === 'yes' && moving) {
     if (steeper > 0.03 && sim.gear > 1) advice = 'change down soon';
     else if (steeper < -0.03 && sim.gear < cfg.gears.length) advice = 'change up soon';
   }
-  return { text: `${word} ${pct} in ${dist} m`, advice, steeper, grade: next.grade };
+  return { text: `${what} IN ${dist} m`, advice, steeper, grade: next.grade };
 };

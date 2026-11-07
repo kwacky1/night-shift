@@ -63,7 +63,7 @@ Mainframe power (the `PWR` meter in the tray, amber when LOW, orange at BROWNOUT
 - The throttle is stuck open, so all you do is work the clutch and pick gears. There is no steering.
 - The road has hills. Each gear has its own torque curve: too high a gear for the slope and the engine bogs and stalls; too low and it screams into the limiter and stalls. Grinding (shifting without the clutch) does nothing useful.
 - Keep the rev needle in the green **CHARGE ZONE** on the tacho. Outside it, charging drops away fast. The line under the road says what's happening right now (`CHARGING +1.6%/min | drain -0.9%/min`, or `NOT CHARGING: wrong gear - revs too low, change down`).
-- The road is coloured by grade (amber climbs, blue descents) with signposts where it changes, and the HUD warns you ("CLIMB +15% in 120 m -> change down soon"). Expect to change gear every 10 to 20 seconds; no single gear works for long.
+- The road is coloured by grade (amber climbs, blue descents) with signposts where it changes, and the HUD warns you ("15% CLIMB IN 120 m -> change down soon"). Expect to change gear every 10 to 20 seconds; no single gear works for long.
 - If it stalls, hold the clutch to crank it back to life.
 - Stopped on a hill? Hold the clutch, drop to 1st and let go. 1st slips the clutch so it always pulls away, even on the steepest climb; letting it in from high revs dumps the clutch for a short extra shove.
 - The status line always comes first and gives one bit of advice that fits your gear (it never says "change down" in 1st). The HUD look-ahead only adds advice when you're already charging and moving.
