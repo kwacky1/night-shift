@@ -187,7 +187,7 @@ On Windows, use escaped backslashes in JSON paths (`"C:\\code\\night-shift\\mcp\
 
 ### 3. Dial in from the game
 
-Open **INTERN.EXE** (desktop, Start menu or the `INTERN:` tray button), check the address (`ws://localhost:7117`) and click **Dial**. The tray shows `INTERN: ONLINE` when the agent is on the line. Locally you can also load `http://localhost:8080/?intern=ws://localhost:7117`. The game remembers the address and quietly redials it whenever the game loads (a few tries with backoff). If nothing answers, the scripted intern stays on duty.
+Open **INTERN.EXE** (desktop, Start menu or the `INTERN:` tray button), check the address (`ws://localhost:7117`) and click **Dial**. The tray shows `INTERN: ONLINE` when the agent is on the line. Locally you can also load `http://localhost:8080/?intern=ws://localhost:7117`. The game remembers the address and quietly redials it whenever the game loads (a few tries with backoff). If nothing answers, the scripted intern stays on duty. A dial you make yourself tries up to 5 times (backing off from 1 s to 10 s), then shows **DIAL FAILED** with a **Retry** button rather than dialling forever. Inside a frame (itch.io) it gives up after the first failure; see below.
 
 The game and the driver check each other's protocol and state version on `hello`. If they don't match (say you updated the game but your agent is still running an old `night-shift-mcp`), the line is refused out loud: INTERN.EXE and the tray say **INTERN DRIVER OUT OF DATE (game vN, driver vM)** / `DRIVER OLD`, and every tool tells the agent the same. Update the server (
 px -y night-shift-mcp@latest, or restart it from the same checkout as the game) and Redial. A state message the driver can't read shows **LINE NOISE** rather than going quietly deaf.
@@ -216,9 +216,11 @@ With nothing connected, INTERN.EXE runs a scripted intern. It's keen, useless an
 
 The itch.io page is served over https, and the game still dials `ws://localhost` on your own machine. Nothing leaves your computer.
 
-- **Chrome, Edge, Firefox**: allowed. Browsers treat `localhost` as a potentially trustworthy origin, so it isn't blocked as mixed content. Recent Chrome may ask to allow access to devices on your local network: click **Allow**. If you clicked Block, the padlock's site settings (for html.itch.zone) let you change it back.
+- **Chrome, Edge**: Local Network Access only lets a public page reach `localhost` once you allow it, and inside itch's embed iframe the browser can't even ask (itch's frame doesn't delegate the permission), so the dial just fails. INTERN.EXE spots that it's in a frame and shows **LINE BLOCKED BY YOUR BROWSER** with an **OPEN IN ITS OWN TAB** button. That opens the frame's own page (`html-classic.itch.zone/...`) as a normal tab, already dialling your address; click **Allow** when the browser asks to *access other apps and services on this device*. itch's fullscreen button doesn't help, as it's still the same frame. If you clicked Block, the padlock's site settings (for html-classic.itch.zone) let you change it back.
+- **Saves**: browsers keep an embedded frame's storage separate from the same site in its own tab, so the new tab has its own save. Dial before you play far.
+- **Firefox**: fine in the frame.
 - **Safari**: blocks `ws://` from https pages as mixed content. Use another browser, or run the game locally with `npm start`.
-- itch.io runs the game in an iframe that doesn't receive query parameters, so use the **Dial** field in INTERN.EXE rather than `?intern=`.
+- itch.io runs the game in an iframe that doesn't receive query parameters, so use the **Dial** field in INTERN.EXE rather than `?intern=` (the own-tab button adds it for you).
 - The server accepts `*.itch.zone` and `*.itch.io` origins by default. If you host the game somewhere else, add `--allow-origin https://your.host`.
 
 ### Security
@@ -259,7 +261,8 @@ game/
     intern/           the scripted fallback intern
     ui/               DOM rendering: boot, desktop, windows, explorer, viewer, bitrot, intern,
                       geargrind (canvas + Web Audio), taskbar, shiftend, blame
-    bridge/api.js     window.NIGHT_SHIFT + the ws:// intern bridge (allowlist, reconnect)
+    bridge/api.js     window.NIGHT_SHIFT + the ws:// intern bridge (allowlist, reconnect, dial cap)
+    bridge/line.js    framed detection, DIAL FAILED / LINE BLOCKED wording, OPEN IN ITS OWN TAB url
     main.js           wires store to UI; timers and saving live here, not in the reducer
   tests/              node:test suites
 mcp/                  night-shift-mcp (npm workspace, published to npm)

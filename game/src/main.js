@@ -22,6 +22,7 @@ import { addEnding, ENDINGS_KEY, parseEndings, scriptedBlame, scriptedBlameDecis
 import { askKey, askPending } from './core/permissions.js';
 import { powerStatus } from './core/power.js';
 import { connectIntern, exposeApi, isLocalSocketUrl } from './bridge/api.js';
+import { dialFailure, isFramed, localNetworkPermission, ownTabUrl } from './bridge/line.js';
 import { fallbackAsk, fallbackNag, fallbackReply } from './intern/fallback.js';
 import { opLabel } from './logic/puzzle.js';
 import { tickMs, unreadForPlayer } from './core/selectors.js';
@@ -111,14 +112,25 @@ const boot = async () => {
       return null;
     }
   };
+  const framed = isFramed(window);
   const setInternStatus = (status, detail = null) => {
     const driver = status === 'outdated' ? detail : null;
     const warning = status === 'online' ? (detail?.warning ?? (ui.internStatus === 'online' ? ui.internWarning : null)) : null;
-    if (ui.internStatus === status && ui.internDriver === driver && ui.internWarning === warning) return;
+    const failure = status === 'failed' ? dialFailure({ framed, attempts: detail?.attempts }) : null;
+    if (ui.internStatus === status && ui.internDriver === driver && ui.internWarning === warning && !failure) return;
     ui.internStatus = status;
     ui.internDriver = driver;
     ui.internWarning = warning;
+    ui.internFailure = failure;
     ctx.rerender();
+    // Word the hint with the browser's Local Network Access permission, if it will tell us.
+    if (failure) {
+      localNetworkPermission(navigator).then((permission) => {
+        if (ui.internStatus !== 'failed' || permission === null) return;
+        ui.internFailure = dialFailure({ framed, permission, attempts: detail?.attempts });
+        ctx.rerender();
+      });
+    }
     // A real intern that drops off the line mid-audit hands back to the scripted one.
     setTimeout(() => scriptedBlameCheck(), 0);
   };
@@ -149,7 +161,8 @@ const boot = async () => {
       url: () => bridge?.url ?? savedUrl() ?? DEFAULT_INTERN_URL,
       dial: (url, { quiet = false } = {}) => {
         bridge?.close();
-        bridge = connectIntern(url, store, setInternStatus, { quiet });
+        // In itch's iframe the browser blocks the line outright: say so on the first failure.
+        bridge = connectIntern(url, store, setInternStatus, { quiet, ...(framed && { maxAttempts: 1 }) });
         if (!bridge) {
           store.dispatch(actions.chatSend(`Refusing to dial ${url}. Only ws://localhost or ws://127.0.0.1 addresses are allowed.`, 'intern', { scripted: true }));
           return;
@@ -187,6 +200,9 @@ const boot = async () => {
         bridge = null;
         localStorage.removeItem(INTERN_URL_KEY);
       },
+      framed: () => framed,
+      // The frame's own page in a new top-level tab, where the browser can ask for local network access.
+      openOwnTab: (url) => window.open(ownTabUrl(location.href, url), '_blank', 'noopener'),
     },
   };
 

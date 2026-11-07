@@ -35,6 +35,8 @@ const FINAL_CLOSE_CODES = new Set([4000, 4003]);
 export const LINE_TAKEN_CODE = 4000;
 // A quiet (automatic, on page load) dial gives up after this many failed attempts.
 export const QUIET_ATTEMPTS = 4;
+// A dial the player made gives up (DIAL FAILED) after this many failed attempts in a row.
+export const DIAL_ATTEMPTS = 5;
 // Actions that fire constantly. Their state updates to the bridge are coalesced (at most one a second).
 export const NOISY_ACTIONS = new Set([ActionTypes.TICK, ActionTypes.DRIVE_REPORT]);
 const COALESCE_MS = 1000;
@@ -126,9 +128,13 @@ export const GAME_VERSION = Object.freeze({ protocol: PROTOCOL_VERSION, version:
 export const outdatedText = (game, driver) => `INTERN DRIVER OUT OF DATE (game ${versionTag(game)}, driver ${versionTag(driver)})`;
 
 // Connects (and keeps reconnecting) to a local bridge. onStatus receives
-// 'connecting' | 'online' | 'offline' | 'taken' | 'outdated', plus a detail object for some:
-// 'outdated' -> { game, driver, text }, and { warning } with 'online' when the driver couldn't
-// read a state we sent. Returns { url, close } or null for non-local URLs.
+// 'connecting' | 'online' | 'offline' | 'taken' | 'outdated' | 'failed', plus a detail object for some:
+// 'outdated' -> { game, driver, text }, 'failed' -> { attempts }, and { warning } with 'online' when
+// the driver couldn't read a state we sent. Returns { url, close } or null for non-local URLs.
+//
+// options.maxAttempts (default DIAL_ATTEMPTS): failed opens in a row (with 1, 2, 4, 8, 10 s backoff)
+// before giving up with 'failed'. The count restarts whenever a socket opens. In itch's iframe the
+// browser blocks the line outright, so main.js passes 1 there.
 //
 // options.quiet: an automatic dial (a saved address on page load). It reports 'offline' rather than
 // 'connecting' until it gets through, backs off (1, 2, 4, 8 s) and gives up after QUIET_ATTEMPTS, so
@@ -142,6 +148,7 @@ export const connectIntern = (url, store, onStatus = () => {}, options = {}) => 
   }
   const {
     quiet = false,
+    maxAttempts = DIAL_ATTEMPTS,
     WebSocketImpl = globalThis.WebSocket,
     setTimer = setTimeout,
     clearTimer = clearTimeout,
@@ -160,6 +167,7 @@ export const connectIntern = (url, store, onStatus = () => {}, options = {}) => 
   let outdated = null;
   let everOnline = false;
   let attempts = 0;
+  let failures = 0;
   const status = (s) => onStatus(s === 'connecting' && quiet && !everOnline ? 'offline' : s);
   const goOutdated = (sock, driver) => {
     if (outdated) return;
@@ -175,6 +183,7 @@ export const connectIntern = (url, store, onStatus = () => {}, options = {}) => 
     status('connecting');
     ws = new WebSocketImpl(url);
     const sock = ws;
+    let opened = false;
     const send = (msg) => sock.readyState === OPEN && sock.send(JSON.stringify(msg));
     let lastSent = 0;
     const flush = (type) => {
@@ -187,6 +196,8 @@ export const connectIntern = (url, store, onStatus = () => {}, options = {}) => 
     sock.addEventListener('open', () => {
       retryMs = RECONNECT_MIN_MS;
       everOnline = true;
+      opened = true;
+      failures = 0;
       onStatus('online');
       send({ type: 'hello', protocol: PROTOCOL_VERSION, version: STATE_VERSION, state: store.getState() });
       welcomeTimer = setTimer(() => goOutdated(sock, null), welcomeMs);
@@ -231,8 +242,14 @@ export const connectIntern = (url, store, onStatus = () => {}, options = {}) => 
         goOutdated(sock, null);
         return;
       }
-      if (FINAL_CLOSE_CODES.has(event.code) || (quiet && !everOnline && attempts >= QUIET_ATTEMPTS)) {
+      const silent = quiet && !everOnline;
+      if (FINAL_CLOSE_CODES.has(event.code) || (silent && attempts >= QUIET_ATTEMPTS)) {
         onStatus('offline');
+        return;
+      }
+      if (!opened) failures++;
+      if (!silent && failures >= maxAttempts) {
+        onStatus('failed', { attempts: failures });
         return;
       }
       status('connecting');

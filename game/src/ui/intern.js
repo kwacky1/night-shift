@@ -16,7 +16,10 @@ const statusText = () =>
     connecting: 'Dialling...',
     taken: 'Line lost to another terminal.',
     outdated: 'Intern driver out of date. Scripted intern on duty.',
+    failed: 'Dial failed. Scripted intern on duty.',
   })[ui.internStatus] ?? 'No agent. Scripted intern on duty.';
+
+const IDLE = new Set(['offline', 'taken', 'outdated', 'failed']);
 
 export const internView = {
   title: () => 'INTERN.EXE - #0118',
@@ -41,6 +44,13 @@ export const internView = {
           <span>The intern's MCP server is from a different build of the game and can't hear this one. Restart <code>night-shift-mcp</code> from this checkout (your agent usually restarts it for you), then Redial.</span>
           <button type="button" class="redial">Redial</button>
         </div>
+        <div class="dial-failed" role="alert" hidden>
+          <b class="failed-title">DIAL FAILED</b>
+          <span class="failed-text"></span>
+          <span class="failed-hint"></span>
+          <button type="button" class="open-tab" hidden>OPEN IN ITS OWN TAB</button>
+          <button type="button" class="redial">Retry</button>
+        </div>
         <div class="line-noise" hidden></div>
         <div class="chat sunken" role="log" aria-live="polite"></div>
         <div class="typing" hidden>#0118 is typing...</div>
@@ -53,10 +63,11 @@ export const internView = {
     urlInput.value = ctx.intern.url();
     body.querySelector('.dial').addEventListener('submit', (e) => {
       e.preventDefault();
-      if (ui.internStatus === 'offline' || ui.internStatus === 'taken' || ui.internStatus === 'outdated') ctx.intern.dial(urlInput.value.trim() || DEFAULT_INTERN_URL);
+      if (IDLE.has(ui.internStatus)) ctx.intern.dial(urlInput.value.trim() || DEFAULT_INTERN_URL);
       else ctx.intern.hangUp();
     });
     body.querySelectorAll('.redial').forEach((b) => b.addEventListener('click', () => ctx.intern.dial(urlInput.value.trim() || DEFAULT_INTERN_URL)));
+    body.querySelector('.open-tab').addEventListener('click', () => ctx.intern.openOwnTab(urlInput.value.trim() || DEFAULT_INTERN_URL));
     const compose = body.querySelector('.compose');
     compose.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -71,10 +82,19 @@ export const internView = {
   render(body, state, prev, win) {
     const root = body.querySelector('.intern-app');
     root.dataset.status = ui.internStatus;
-    const idle = ui.internStatus === 'offline' || ui.internStatus === 'taken' || ui.internStatus === 'outdated';
-    body.querySelector('.dial-btn').textContent = { offline: 'Dial', taken: 'Redial', outdated: 'Redial' }[ui.internStatus] ?? 'Hang up';
+    const idle = IDLE.has(ui.internStatus);
+    body.querySelector('.dial-btn').textContent = idle ? (ui.internStatus === 'offline' ? 'Dial' : 'Redial') : 'Hang up';
     body.querySelector('input[name="url"]').disabled = !idle;
     body.querySelector('.line-taken').hidden = ui.internStatus !== 'taken';
+    const failed = body.querySelector('.dial-failed');
+    const failure = ui.internStatus === 'failed' ? ui.internFailure : null;
+    failed.hidden = !failure;
+    if (failure) {
+      failed.querySelector('.failed-title').textContent = failure.title;
+      failed.querySelector('.failed-text').textContent = failure.text;
+      failed.querySelector('.failed-hint').textContent = failure.hint;
+      failed.querySelector('.open-tab').hidden = !failure.openTab;
+    }
     const old = body.querySelector('.driver-old');
     old.hidden = ui.internStatus !== 'outdated';
     if (!old.hidden) old.querySelector('.driver-text').textContent = ui.internDriver?.text ?? 'INTERN DRIVER OUT OF DATE';

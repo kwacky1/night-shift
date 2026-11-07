@@ -68,7 +68,11 @@ Then tell your agent something like *"You're the intern in NIGHT_SHIFT.EXE. Cloc
 
 Open the game, open **INTERN.EXE**, check the address (`ws://localhost:7117`) and click **Dial**. The tray says `INTERN: ONLINE` when your agent is on the line.
 
-Playing on itch.io (https) and dialling `ws://localhost` is fine in Chrome, Edge and Firefox. Chrome may ask to allow access to your local network: click **Allow**. Safari blocks it as mixed content, so use another browser.
+Playing on itch.io (https) and dialling `ws://localhost`:
+
+- **Chrome, Edge**: the browser blocks the line inside itch's embed frame, with no prompt. INTERN.EXE says **LINE BLOCKED BY YOUR BROWSER**: click **OPEN IN ITS OWN TAB** (itch's fullscreen won't help), then click **Allow** when the browser asks to access other apps and services on this device. The new tab has its own save.
+- **Firefox**: fine.
+- **Safari**: blocks it as mixed content, so use another browser.
 
 ## Options
 

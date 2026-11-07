@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { isLocalSocketUrl, handleBridgeMessage, sanitiseRemoteAction, REMOTE_ACTION_TYPES, connectIntern, LINE_TAKEN_CODE, QUIET_ATTEMPTS, PROTOCOL_VERSION, WELCOME_TIMEOUT_MS, parseControl } from '../src/bridge/api.js';
+import { isLocalSocketUrl, handleBridgeMessage, sanitiseRemoteAction, REMOTE_ACTION_TYPES, connectIntern, LINE_TAKEN_CODE, QUIET_ATTEMPTS, DIAL_ATTEMPTS, PROTOCOL_VERSION, WELCOME_TIMEOUT_MS, parseControl } from '../src/bridge/api.js';
 import { createStore } from '../src/core/store.js';
 import { reducer } from '../src/core/reducer.js';
 import { actions } from '../src/core/actions.js';
@@ -161,6 +161,59 @@ test('a quiet auto-dial stays SCRIPTED while it tries, then gives up', () => {
   assert.ok(statuses.every((s) => s === 'offline'), `never shows DIALLING: ${statuses.join(',')}`);
   net.advance(60000);
   assert.equal(net.sockets.length, QUIET_ATTEMPTS, 'gave up');
+});
+
+test('a failed dial gives up with DIAL FAILED after DIAL_ATTEMPTS, with backoff', () => {
+  const net = fakeNet();
+  const seen = [];
+  connectIntern('ws://localhost:7117', gameStore(), (s, d) => seen.push([s, d]), net.opts);
+  for (let i = 1; i < DIAL_ATTEMPTS; i++) {
+    net.sockets.at(-1).drop();
+    assert.equal(seen.at(-1)[0], 'connecting');
+    net.advance(10000);
+  }
+  net.sockets.at(-1).drop();
+  assert.deepEqual(seen.at(-1), ['failed', { attempts: DIAL_ATTEMPTS }]);
+  net.advance(60000);
+  assert.equal(net.sockets.length, DIAL_ATTEMPTS, 'no more redials');
+});
+
+test('a framed dial (maxAttempts 1) fails on the first attempt instead of Dialling forever', () => {
+  const net = fakeNet();
+  const seen = [];
+  connectIntern('ws://localhost:7117', gameStore(), (s, d) => seen.push([s, d]), { ...net.opts, maxAttempts: 1 });
+  net.sockets[0].drop();
+  assert.deepEqual(seen.map(([s]) => s), ['connecting', 'failed']);
+  net.advance(60000);
+  assert.equal(net.sockets.length, 1);
+});
+
+test('after being online, drops redial and the failure count starts again', () => {
+  const net = fakeNet();
+  const statuses = [];
+  connectIntern('ws://localhost:7117', gameStore(), (s) => statuses.push(s), { ...net.opts, maxAttempts: 2 });
+  net.sockets[0].drop();
+  net.advance(10000);
+  net.sockets[1].accept();
+  net.sockets[1].drop();
+  assert.equal(statuses.at(-1), 'connecting', 'the drop from an open line does not count');
+  net.advance(10000);
+  net.sockets[2].drop();
+  assert.equal(statuses.at(-1), 'connecting');
+  net.advance(10000);
+  net.sockets[3].drop();
+  assert.equal(statuses.at(-1), 'failed');
+});
+
+test('a quiet auto-dial never shows DIAL FAILED, even with maxAttempts 1', () => {
+  const net = fakeNet();
+  const statuses = [];
+  connectIntern('ws://localhost:7117', gameStore(), (s) => statuses.push(s), { ...net.opts, quiet: true, maxAttempts: 1 });
+  for (let i = 0; i < QUIET_ATTEMPTS; i++) {
+    net.sockets.at(-1).drop();
+    net.advance(10000);
+  }
+  assert.ok(statuses.every((s) => s === 'offline'), statuses.join(','));
 });
 
 test('a quiet auto-dial that gets through is a normal line', () => {

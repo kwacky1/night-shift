@@ -59,8 +59,9 @@ You need Node 20+ and an MCP-capable agent. Add this to your agent's MCP config:
 Tell your agent something like *"You're the intern in NIGHT_SHIFT.EXE. Clock in and help me."* Then in the game open **INTERN.EXE**, leave the address as `ws://localhost:7117` and click **Dial**.
 
 - The server runs on your machine and the game talks to it over `ws://localhost`. Nothing about your game goes anywhere else (apart from whatever your agent does with what it's told, so pick an agent you trust).
-- Chrome, Edge and Firefox are fine. Chrome may ask to allow access to devices on your local network: click **Allow**.
-- Safari blocks `ws://localhost` from an https page. Use another browser for the AI intern.
+- **Chrome and Edge** block the line inside itch's frame, without asking. INTERN.EXE will say **LINE BLOCKED BY YOUR BROWSER**: click **OPEN IN ITS OWN TAB** (the fullscreen button won't help), then click **Allow** when the browser asks to access other apps and services on this device. The new tab keeps its own save, so dial before you play far.
+- **Firefox** is fine in the frame.
+- **Safari** blocks `ws://localhost` from an https page. Use another browser for the AI intern.
 - itch.io runs the game in a frame, so use the Dial button, not a `?intern=` link.
 
 ### Credits
