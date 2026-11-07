@@ -103,6 +103,21 @@ const run = async () => {
   await page.evaluate(() => window.NIGHT_SHIFT.dispatch(window.NIGHT_SHIFT.actions.openFile('payroll')));
   await page.waitForSelector('.bitrot[data-noop-seq]');
   ok('the board flashes NO CHANGE for the player too');
+  const nextHint = await page.textContent('.bitrot .next');
+  expect(/^NEXT: YOU \[[\d ]+\] or #0118 \[[\d ]+\]/.test(nextHint), 'the board says whose hands can make the next move', nextHint);
+  const requests = () => page.evaluate(() => window.NIGHT_SHIFT.getState().intern.messages.filter((m) => m.from === 'player' && /can you run/.test(m.text)).length);
+  const asked0 = await requests();
+  const askBtn = page.locator('.bitrot .ops button.hands-intern').first();
+  expect(/ASK #0118/.test(await askBtn.textContent()), 'a remote-only op reads as a request: ASK #0118');
+  await askBtn.click();
+  await page.waitForSelector('.bitrot .ops button.hands-intern.asked[disabled]');
+  await page.keyboard.press(String(Number(await askBtn.getAttribute('data-op')) + 1));
+  await askBtn.click({ force: true, timeout: 1000 }).catch(() => {});
+  await page.waitForTimeout(200);
+  expect((await requests()) === asked0 + 1 && /ASKED/.test(await askBtn.textContent()), 'asking #0118 twice sends one request (ASKED until it moves)');
+  mkdirSync(SHOTS, { recursive: true });
+  await page.screenshot({ path: `${SHOTS}/smoke-ask.png` });
+  await tool('read_messages');
   expect(/cannot use XOR|CONSOLE ONLY/i.test(await tool('xor', { puzzle: 'payroll', mask: '0x0F0F' })), 'XOR refused down the line');
   await page.evaluate(() => window.NIGHT_SHIFT.dispatch(window.NIGHT_SHIFT.actions.applyOp('payroll', 2)));
   await tool('shift_left', { puzzle: 'payroll' });
@@ -233,22 +248,71 @@ const run = async () => {
   const auditView = await tool('audit_status');
   expect(/"suspects"/.test(auditView) && /BOOTLOG\.TXT/.test(auditView) && !/points|weight|endings/.test(auditView), 'audit_status: suspects and files read, no verdict rules', auditView);
   expect(/audit/i.test(await tool('shift_left', { puzzle: 'payroll' })), 'ops are frozen for the audit');
-  const filedAi = await tool('submit_blame', { suspect: 'sysadmin', evidence: ['BOOTLOG.TXT:4', 'NS-02.LOG:8'], statement: 'I was on the remote line all night. Ask NS-02.' });
-  expect(/Statement filed/.test(filedAi), 'the agent files its statement with submit_blame', filedAi);
-  await page.waitForFunction(() => /#0118: statement filed/.test(document.querySelector('.blame-app .status').textContent));
+
+  // Gear Grind was open: the day crew take the generator, the card points at BLAME.EXE.
+  await page.waitForSelector('.gg-parked:not([hidden])');
+  const parked = await page.evaluate(() => {
+    const s = window.NIGHT_SHIFT.getState();
+    return { card: document.querySelector('.gg-parked').textContent, up: document.querySelector('.gg-controls [data-ctl="up"]').disabled, top: s.windows.find((w) => w.id === s.focusedWindowId)?.kind, gen: s.power.generator, distance: s.stats.distance };
+  });
+  expect(/DAY CREW HAS THE GENERATOR/.test(parked.card) && /km/.test(parked.card) && /BLAME\.EXE/.test(parked.card) && parked.up && parked.top === 'blame' && !parked.gen.running, 'at 06:00 Gear Grind parks with a wrap-up card and BLAME.EXE comes to the front', JSON.stringify(parked));
+  await page.evaluate(() => {
+    const { dispatch, actions, getState } = window.NIGHT_SHIFT;
+    dispatch(actions.focusWindow(getState().windows.find((w) => w.kind === 'geargrind').id));
+  });
+  await page.waitForTimeout(100);
+  await page.keyboard.down('Space');
+  await page.keyboard.press('ShiftRight');
+  await page.waitForTimeout(800);
+  await page.keyboard.up('Space');
+  const stillParked = await page.evaluate(() => ({ gen: window.NIGHT_SHIFT.getState().power.generator, distance: window.NIGHT_SHIFT.getState().stats.distance, clutch: document.querySelector('.geargrind').dataset.clutch }));
+  expect(!stillParked.gen.running && stillParked.distance === parked.distance && stillParked.clutch === 'out', 'no driving during the audit', JSON.stringify(stillParked));
+  await page.screenshot({ path: `${SHOTS}/smoke-geargrind-parked.png` });
+  await page.evaluate(() => window.NIGHT_SHIFT.dispatch(window.NIGHT_SHIFT.actions.openFile('blame')));
+
+  // The sysadmin files first. With the AI on the line the scripted intern never steps in.
+  expect(/AUDIT OPEN/.test(await tool('read_messages')), 'read_messages carries the 06:00 AUDIT OPEN ping');
   await page.check('.blame-app input[name="suspect"][value="0118"]');
   await page.click('.blame-app .lines li[data-ref]');
   await page.waitForSelector('.blame-app .chips .chip');
   await page.fill('.blame-app input[name="statement"]', 'The intern ran half the ops tonight.');
   await page.screenshot({ path: `${SHOTS}/smoke-blame.png` });
   await page.click('.blame-app .file-statement');
+  await page.waitForFunction(() => /WAITING FOR #0118/.test(document.querySelector('.blame-app .status').textContent));
+  await page.waitForTimeout(3000);
+  const waiting = await page.evaluate(() => ({ intern: window.NIGHT_SHIFT.getState().blame.intern, status: document.querySelector('.blame-app .status').textContent, button: !document.querySelector('.blame-app .without').hidden }));
+  expect(!waiting.intern && /WAITING FOR #0118/.test(waiting.status) && waiting.button, 'BLAME.EXE waits for the AI (no scripted statement) and offers FILE WITHOUT THE INTERN', JSON.stringify(waiting));
+  expect(/HEAD OFFICE: 06:00 AUDIT OPEN/.test(await tool('whoami')), 'tool results remind the agent to file');
+  const filedAi = await tool('submit_blame', { suspect: 'sysadmin', evidence: ['BOOTLOG.TXT:4', 'NS-02.LOG:8'], statement: 'I was on the remote line all night. Ask NS-02.' });
+  expect(/Statement filed/.test(filedAi), 'the agent files its statement with submit_blame', filedAi);
   await page.waitForSelector('#shiftend:not([hidden]) .endings');
   const verdict = await page.evaluate(() => ({ end: window.NIGHT_SHIFT.getState().shiftEnd, card: document.querySelector('#shiftend').textContent, saved: localStorage.getItem('night-shift:endings') }));
   expect(verdict.end.reason === 'audit' && verdict.card.includes(verdict.end.ending.title), `the verdict ends the shift: ${verdict.end.ending?.title}`, verdict.card);
   expect(/ENDINGS FOUND 1\//.test(verdict.card) && /YOU BLAMED/.test(verdict.card) && /#0118 BLAMED/.test(verdict.card), 'end screen shows who blamed whom and the endings tally');
   expect(JSON.parse(verdict.saved).includes(verdict.end.ending.id), 'the ending is saved to the tally in localStorage');
   expect(/audit is closed/.test(await tool('whoami')), 'the agent hears the verdict');
+  expect(!/\(scripted\)/.test(verdict.card), 'the AI\'s statement is on the end screen, not a scripted one');
   await page.screenshot({ path: `${SHOTS}/smoke-verdict.png` });
+
+  // Another shift on the same line: the sysadmin gives up waiting and files without the intern.
+  await page.click('#shiftend .new-shift');
+  await page.waitForFunction(() => window.NIGHT_SHIFT.getState().phase === 'clockin');
+  await page.evaluate(() => {
+    const { dispatch, actions, getState } = window.NIGHT_SHIFT;
+    dispatch(actions.clockIn());
+    const s = getState();
+    dispatch(actions.hydrate({ ...s, power: { ...s.power, level: 90, config: { ...s.power.config, drainPerMinute: 0 } } }));
+    dispatch(actions.tick(420));
+    dispatch(actions.tick(480 - getState().clock.elapsed));
+  });
+  await page.waitForSelector('.blame-app .without:not([hidden]) .file-without');
+  await page.check('.blame-app input[name="suspect"][value="0117"]');
+  await page.click('.blame-app .file-statement');
+  await page.waitForFunction(() => /WAITING FOR #0118/.test(document.querySelector('.blame-app .status').textContent));
+  await page.click('.blame-app .file-without');
+  await page.waitForSelector('#shiftend:not([hidden]) .endings', { timeout: 10000 });
+  const without = await page.evaluate(() => ({ intern: window.NIGHT_SHIFT.getState().blame.intern, card: document.querySelector('#shiftend').textContent }));
+  expect(without.intern?.scripted && /\(scripted\)/.test(without.card), 'FILE WITHOUT THE INTERN files the scripted statement (marked scripted)', JSON.stringify(without.intern));
 
   // No agent: the scripted intern, replaying Simon's playtest in a fresh browser profile.
   const solo = await (await browser.newContext({ viewport: { width: 1024, height: 768 } })).newPage();

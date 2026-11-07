@@ -88,7 +88,7 @@ Things happen during the night: messages from Facilities, files that weren't the
 
 ### 06:00: the audit
 
-Head Office has questions about NS-02. If BLAME.EXE has made it onto your desktop by 06:00, the clock stops, NS-02 freezes and **BLAME.EXE** opens. You and #0118 each file one statement: who did it (#0117, you, the intern, Facilities or Head Office), up to three `file:line` citations from things you've been able to open tonight, and a sentence of why. The intern files through its own tool (or the scripted intern files after you, and it is not on your side). Head Office weighs the accusations, the evidence and what actually happened on the night, then writes a name in the report. There are several endings. Some of them are not good for you. The end screen keeps an **ENDINGS FOUND** tally across shifts (in `localStorage` under `night-shift:endings`, separate from the save).
+Head Office has questions about NS-02. If BLAME.EXE has made it onto your desktop by 06:00, the clock stops, NS-02 freezes and **BLAME.EXE** opens. You and #0118 each file one statement: who did it (#0117, you, the intern, Facilities or Head Office), up to three `file:line` citations from things you've been able to open tonight, and a sentence of why. The intern files through its own tool: the moment the audit opens, #0118 gets a **06:00 AUDIT OPEN** ping in `read_messages`, and every tool result reminds it until it has filed. While an AI intern is on the line, BLAME.EXE shows **WAITING FOR #0118...** for as long as it takes, with a **FILE WITHOUT THE INTERN** button if you give up on it. With no AI (or if it hangs up while you wait), the scripted intern files after you, and it is not on your side. Generator 2 goes to the day crew at 06:00: GEARGRIND.EXE parks, stops draining and stalling, and shows a wrap-up card (km driven, stalls, lowest mainframe power) pointing you at BLAME.EXE. Head Office weighs the accusations, the evidence and what actually happened on the night, then writes a name in the report. There are several endings. Some of them are not good for you. The end screen keeps an **ENDINGS FOUND** tally across shifts (in `localStorage` under `night-shift:endings`, separate from the save).
 
 ### End of shift
 
@@ -101,6 +101,8 @@ Each puzzle window has a legend: **green** squares are lit and correct, **amber*
 ### Two pairs of hands
 
 Some ops only work from one side. A small **CONSOLE** tag means only you can run it at NS-02; **REMOTE** means only the intern can, down the line (clicking it asks #0118 to do it). The intern also has a small remote op quota per sector (**REMOTE n/N** on the board); undo or reset gives ops back. Neither of you can recover a sector alone.
+
+Remote-only ops are requests: the button reads **ASK #0118** and, with an AI on the line, sends one chat request and then shows **ASKED** until the sector changes (or 45 s pass), so a double click doesn't nag. Under the buttons, **NEXT: YOU [1 3] or #0118 [2]** shows whose hands can apply which op right now, given clearance, keys and the remote quota. It never says which op is right.
 
 An op that wouldn't change the value (`>> 3` on `0x0000`, say) flashes **NO CHANGE** and doesn't cost a move or any remote quota. The intern's tools say NO CHANGE too.
 
