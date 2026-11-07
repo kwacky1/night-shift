@@ -4,6 +4,12 @@
 
 A [GitHub Game Off 2026](https://itch.io/jam/game-off-2026) entry for the theme **SHIFT**.
 
+## Play
+
+**https://goosey-games.itch.io/night-shift** (in the browser; the slug may still change before launch)
+
+Want a real AI as your intern? Add `npx -y night-shift-mcp` to your agent's MCP config and click **Dial** in INTERN.EXE. See [Connect your intern](#connect-your-intern).
+
 ## Concept
 
 A fake retro operating system you navigate with Shift-click, Shift-drag and renaming files.
@@ -15,8 +21,8 @@ A fake retro operating system you navigate with Shift-click, Shift-drag and rena
 
 ## Tech
 
-- `game/`: browser game (HTML/CSS/JS ES modules, no engine, no build step)
-- `mcp/`: Node MCP server (`npx night-shift-mcp`) that talks to the game over `ws://localhost`
+- `game/`: browser game (HTML/CSS/JS ES modules, no engine). `npm run build` copies it into `dist/html/` for itch.io; there's no bundling or transpiling.
+- `mcp/`: Node MCP server ([`night-shift-mcp`](mcp/README.md) on npm) that talks to the game over `ws://localhost`
 
 ## Running it
 
@@ -27,11 +33,10 @@ npm install
 npm start       # serves game/ at http://localhost:8080
 npm test        # node:test suites for the game and the MCP server
 npm run smoke   # end to end: MCP client -> server -> the game in headless Chrome (needs Chrome or Edge)
+npm run build   # the itch.io upload, in dist/html/
 ```
 
-The dev server sends `Cache-Control: no-store` on every response, so after editing code just refresh the page; no restart needed. Restart it only when you switch worktrees (it serves the `game/` folder of the checkout it was started from). The itch.io build is a static zip and isn't affected.
-
-For itch.io, zip the contents of `game/` (so `index.html` is at the root of the zip) and upload it as an HTML game.
+The dev server sends `Cache-Control: no-store` on every response, so after editing code just refresh the page; no restart needed. Restart it only when you switch worktrees (it serves the `game/` folder of the checkout it was started from). `SERVE_ROOT=dist/html npm start` serves the build instead.
 
 ### Controls
 
@@ -110,23 +115,9 @@ An op that wouldn't change the value (`>> 3` on `0x0000`, say) flashes **NO CHAN
 
 The intern is badge #0118. Plug in any MCP-capable agent and it plays #0118 for real. It can read hidden SYSTEM files and the event log, and it sees Bit Rot sectors as numbers. You see the target patterns as pictures. Neither of you can finish the night alone, so you have to talk.
 
-### 1. Start the server
+### 1. Tell your agent about it
 
-```sh
-npm install
-npx night-shift-mcp          # from the repo; or `npm link` in mcp/ to put it on your PATH
-```
-
-Usually your agent starts it for you (see the configs below). It speaks MCP over stdio and opens a WebSocket for the game on `127.0.0.1:7117`.
-
-| Option | Default | |
-| --- | --- | --- |
-| `--port` / `NIGHT_SHIFT_PORT` | `7117` | WebSocket port the game dials |
-| `--allow-origin <url>` | localhost, `*.itch.zone`, `*.itch.io` | Extra page origin allowed to connect (repeatable) |
-
-### 2. Tell your agent about it
-
-Use the absolute path to `mcp/bin/night-shift-mcp.js` in your clone (or `"command": "npx", "args": ["night-shift-mcp"]` if you ran `npm link`).
+You need Node 20+. Your agent starts the server itself with `npx -y night-shift-mcp` ([npm package](mcp/README.md)). It speaks MCP over stdio and opens a WebSocket for the game on `127.0.0.1:7117`.
 
 **GitHub Copilot CLI**: `~/.copilot/mcp-config.json` (or `/mcp add`)
 
@@ -135,8 +126,8 @@ Use the absolute path to `mcp/bin/night-shift-mcp.js` in your clone (or `"comman
   "mcpServers": {
     "night-shift": {
       "type": "local",
-      "command": "node",
-      "args": ["/path/to/night-shift/mcp/bin/night-shift-mcp.js"],
+      "command": "npx",
+      "args": ["-y", "night-shift-mcp"],
       "tools": ["*"]
     }
   }
@@ -150,8 +141,8 @@ Use the absolute path to `mcp/bin/night-shift-mcp.js` in your clone (or `"comman
   "servers": {
     "night-shift": {
       "type": "stdio",
-      "command": "node",
-      "args": ["/path/to/night-shift/mcp/bin/night-shift-mcp.js"]
+      "command": "npx",
+      "args": ["-y", "night-shift-mcp"]
     }
   }
 }
@@ -163,22 +154,43 @@ Use the absolute path to `mcp/bin/night-shift-mcp.js` in your clone (or `"comman
 {
   "mcpServers": {
     "night-shift": {
-      "command": "node",
-      "args": ["/path/to/night-shift/mcp/bin/night-shift-mcp.js"]
+      "command": "npx",
+      "args": ["-y", "night-shift-mcp"]
     }
   }
 }
 ```
 
-On Windows, use escaped backslashes in JSON paths (`"C:\\code\\night-shift\\mcp\\bin\\night-shift-mcp.js"`). Add `"--port", "7200"` to `args` if 7117 is taken.
+Add `"--port", "7200"` to `args` if 7117 is taken (and dial `ws://localhost:7200`).
+
+| Option | Default | |
+| --- | --- | --- |
+| `--port` / `NIGHT_SHIFT_PORT` | `7117` | WebSocket port the game dials |
+| `--allow-origin <url>` | localhost, `*.itch.zone`, `*.itch.io` | Extra page origin allowed to connect (repeatable) |
 
 Then say something like *"You're the intern in NIGHT_SHIFT.EXE. Clock in and help me."* The server ships persona instructions, so the agent knows the rules without being told the answers.
+
+### 2. Or run it from a clone
+
+If you're hacking on the game, point your agent at the checkout instead, so the server and the game always match:
+
+```sh
+npm install
+```
+
+```json
+"command": "node",
+"args": ["/path/to/night-shift/mcp/bin/night-shift-mcp.js"]
+```
+
+On Windows, use escaped backslashes in JSON paths (`"C:\\code\\night-shift\\mcp\\bin\\night-shift-mcp.js"`). From a clone the bin runs `mcp/src/` directly against `game/src/`, so there's nothing to rebuild.
 
 ### 3. Dial in from the game
 
 Open **INTERN.EXE** (desktop, Start menu or the `INTERN:` tray button), check the address (`ws://localhost:7117`) and click **Dial**. The tray shows `INTERN: ONLINE` when the agent is on the line. Locally you can also load `http://localhost:8080/?intern=ws://localhost:7117`. The game remembers the address and quietly redials it whenever the game loads (a few tries with backoff). If nothing answers, the scripted intern stays on duty.
 
-The game and the driver check each other's protocol and state version on `hello`. If they don't match (say you updated the game but your agent is still running an old `night-shift-mcp`), the line is refused out loud: INTERN.EXE and the tray say **INTERN DRIVER OUT OF DATE (game vN, driver vM)** / `DRIVER OLD`, and every tool tells the agent the same. Restart the server from the same checkout and Redial. A state message the driver can't read shows **LINE NOISE** rather than going quietly deaf.
+The game and the driver check each other's protocol and state version on `hello`. If they don't match (say you updated the game but your agent is still running an old `night-shift-mcp`), the line is refused out loud: INTERN.EXE and the tray say **INTERN DRIVER OUT OF DATE (game vN, driver vM)** / `DRIVER OLD`, and every tool tells the agent the same. Update the server (
+px -y night-shift-mcp@latest, or restart it from the same checkout as the game) and Redial. A state message the driver can't read shows **LINE NOISE** rather than going quietly deaf.
 
 Only one game window can hold the line. If you open the game in a second tab, that tab takes the line and the first one shows **LINE TAKEN BY ANOTHER TERMINAL** in INTERN.EXE and the tray, with a **Redial** button to take it back.
 
@@ -204,7 +216,7 @@ With nothing connected, INTERN.EXE runs a scripted intern. It's keen, useless an
 
 The itch.io page is served over https, and the game still dials `ws://localhost` on your own machine. Nothing leaves your computer.
 
-- **Chrome, Edge, Firefox**: allowed. Browsers treat `localhost` as a potentially trustworthy origin, so it isn't blocked as mixed content. Recent Chrome may ask to allow access to devices on your local network: click **Allow**.
+- **Chrome, Edge, Firefox**: allowed. Browsers treat `localhost` as a potentially trustworthy origin, so it isn't blocked as mixed content. Recent Chrome may ask to allow access to devices on your local network: click **Allow**. If you clicked Block, the padlock's site settings (for html.itch.zone) let you change it back.
 - **Safari**: blocks `ws://` from https pages as mixed content. Use another browser, or run the game locally with `npm start`.
 - itch.io runs the game in an iframe that doesn't receive query parameters, so use the **Dial** field in INTERN.EXE rather than `?intern=`.
 - The server accepts `*.itch.zone` and `*.itch.io` origins by default. If you host the game somewhere else, add `--allow-origin https://your.host`.
@@ -250,8 +262,8 @@ game/
     bridge/api.js     window.NIGHT_SHIFT + the ws:// intern bridge (allowlist, reconnect)
     main.js           wires store to UI; timers and saving live here, not in the reducer
   tests/              node:test suites
-mcp/                  night-shift-mcp (npm workspace)
-  bin/                CLI entry
+mcp/                  night-shift-mcp (npm workspace, published to npm)
+  bin/                CLI entry: runs src/ in a clone, the bundle in dist/ when installed from npm
   src/
     server.js         McpServer, persona instructions, CLI flags
     link.js           localhost WebSocket server the game dials
@@ -260,7 +272,18 @@ mcp/                  night-shift-mcp (npm workspace)
     tools.js          intern tools
   tests/              node:test suites (fake game over a real socket)
   scripts/smoke.js    end-to-end test with headless Chrome
-scripts/serve.js      tiny static dev server
+  scripts/bundle.js   esbuild: src/ + the game modules it uses -> dist/server.js (prepack)
+  README.md           the npm page
+scripts/
+  serve.js            tiny static dev server (SERVE_ROOT to serve another folder)
+  build.js            npm run build: game/ -> dist/html/ for itch.io, relative paths checked
+  verify-pack.js      npm run verify-pack: pack + install night-shift-mcp, smoke the tarball
+  screenshots.js      npm run screenshots: the itch.io page images in docs/itch/
+  balance.js          plays a night with scripted drivers and prints the power table
+docs/
+  itch/               itch.io page copy, settings, cover and screenshots
+  ai-disclosure.md    the jam's AI disclosure
+.github/workflows/ci.yml   test + build + artefact on every push/PR; itch.io upload from main
 ```
 
 ### Adding a Bit Rot puzzle
@@ -318,14 +341,44 @@ All game state is one JSON object and every change is a `dispatch(action)`. The 
 
 - In DevTools: `NIGHT_SHIFT.getState()`, `NIGHT_SHIFT.dispatch(NIGHT_SHIFT.actions.openFile('payroll'))`.
 - The WebSocket protocol (`hello` with `protocol` + `version`, `welcome` / `reject`, `state`, `dispatch`, `result`, `warn`; protocol 3) is documented at the top of `game/src/bridge/api.js`. Bump `STATE_VERSION` (and add a save migration) when the state shape changes; the handshake will then refuse an old driver out loud.
-- `mcp/` imports the game's pure modules (reducer rules, permissions, puzzle logic) from `../game/src`, so it runs from a clone via `npx`/`npm link`. Publishing to npm will need a copy step first.
+- `mcp/src` imports the game's pure modules (reducer rules, permissions, puzzle logic) from `../game/src`, so there's one copy of the rules. The npm package bundles them into `mcp/dist/server.js` (see [Building and releasing](#building-and-releasing)).
+
+## Building and releasing
+
+### The itch.io build
+
+```sh
+npm run build        # dist/html/: index.html, styles/, src/, data/ (no tests)
+```
+
+It's a straight copy of `game/` minus the tests, and it fails if any `src`, `href`, `import` or `fetch` path is absolute or points at something that isn't in the build. itch.io serves the game from a subpath inside an iframe, so everything is relative (the JSON data is fetched relative to `main.js`). `game/tests/build.test.js` checks the same in `npm test`. `SMOKE_GAME_ROOT=dist/html npm run smoke` plays the full smoke test against the build.
+
+### CI and the itch.io upload
+
+`.github/workflows/ci.yml`:
+
+- **test** (every push and PR): `npm ci`, `npm test`, `npm run build`, then uploads `dist/html` as the artefact `night-shift-html-<sha>`. Download it from the run to try a build.
+- **itch** (push to `main`, or **Run workflow** by hand): pushes that artefact to itch.io with butler, on the `html` channel of `goosey-games/<ITCH_GAME>`, versioned `<package.json version>+<short sha>`.
+  - Needs the repo secret **`ITCH_TOKEN`**: a butler API key from itch.io > Settings > API keys.
+  - The repo variable **`ITCH_GAME`** sets the project slug (default `night-shift`).
+  - Without the secret the job skips with a notice rather than failing.
+
+The first time, create the itch.io project (Kind: HTML) before the upload, then tick **This file will be played in the browser** on the `html` upload and set the embed size. Suggested settings and the page copy are in [`docs/itch/page.md`](docs/itch/page.md). `npm run screenshots` retakes the page images.
+
+### Publishing night-shift-mcp to npm
+
+`mcp/src` imports the game's rules from `../game/src`, which doesn't exist in an npm install. So `prepack` (`mcp/scripts/bundle.js`) bundles `src/server.js` and the game modules it uses into `mcp/dist/server.js` with esbuild (npm deps stay external), and the package ships only `bin/`, `dist/`, `README.md` and `LICENSE`. The bin runs `src/` when it finds the game next door (a clone: tests and the smoke always use the live source) and `dist/` otherwise. `mcp/dist/` is gitignored.
+
+1. Bump `version` in `mcp/package.json` **and** `VERSION` in `mcp/src/server.js` (a test checks they match). If the game's `PROTOCOL_VERSION` or `STATE_VERSION` changed, the old driver will be refused by the new game (and the other way round), so ship the game and the package together.
+2. `npm run verify-pack`: packs the workspace, installs the tarball into a fresh temp project, checks nothing in it imports `../game`, and runs the full smoke test against the installed bin. It must pass.
+3. `npm login` (with 2FA), then `npm publish --workspace mcp` (or `cd mcp && npm publish`).
 
 ## Roadmap
 
 1. **Week 1:** OS shell + first Bit Rot puzzle *(done: playable slice in `game/`)*
 2. **Week 2:** MCP bridge, two-way play working *(done: `night-shift-mcp`, INTERN.EXE, clearance, BADGE.DB)*
 3. **Week 3:** Gear Grind power mechanic + story arc *(done: GEARGR~1.EXE, mainframe power and brownouts, the night's story, SUPERVISOR clearance, end-of-shift screen)*
-4. **Week 4:** blame-game finale and intern balance *(milestone 1: BLAME.EXE, two pairs of hands, NO CHANGE, the version handshake)*, then audio, polish and shipping to itch.io
+4. **Week 4:** blame-game finale and intern balance *(milestone 1: BLAME.EXE, two pairs of hands, NO CHANGE, the version handshake)*; shipping *(milestone 4: the itch.io build and CI upload, `night-shift-mcp` on npm, page copy, screenshots and the AI disclosure)*; audio and polish still to come (milestones 2 and 3)
 
 Deadline: 1 December 2026, 13:37 PST.
 

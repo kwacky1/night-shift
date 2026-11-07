@@ -1,12 +1,21 @@
 # Session state - NIGHT_SHIFT.EXE
 
-_Last updated: week 4, milestone 1_
+_Last updated: week 4, milestone 4 (ship)_
 
 ## Status
 - Weeks 1 to 3 are merged to `main`.
 - Week 4 milestone 1 (BLAME.EXE finale, intern balance, NO CHANGE, version handshake) is on branch `kwacky1-week-4-blame-finale`, PR open against `main`.
-- Tests: `npm test` runs 239 game + MCP tests. `npm run smoke` passes 63 E2E checks in headless Chrome (both finales and a driver mismatch included).
-- Milestones 2 to 4 (audio, polish, ship) are proposed below. Ask Simon before starting each one.
+- Tests: `npm test` runs 242 game + MCP tests. `npm run smoke` passes 63 E2E checks in headless Chrome (both finales and a driver mismatch included).
+- Week 4 milestone 4 (ship) is on branch `kwacky1-week-4-ship-milestone`, PR stacked on the milestone 1 PR (#4); retarget to `main` when #4 merges.
+- Milestones 2 and 3 (audio, polish) are still proposed below. Ask Simon before starting each one.
+
+## Week 4 milestone 4 summary (ship)
+- **Build**: `npm run build` (`scripts/build.js`) copies `game/` minus tests into `dist/html/` and fails on any absolute or missing `src`/`href`/`import`/`fetch` path. `game/tests/build.test.js` builds into a temp dir and checks the same. Data is fetched relative to `import.meta.url`, so it works under itch's subpath iframe. `serve.js` takes `SERVE_ROOT`; `SMOKE_GAME_ROOT=dist/html npm run smoke` plays the build.
+- **CI** (`.github/workflows/ci.yml`, replaces `test.yml`): `test` job runs npm ci/test/build and uploads `night-shift-html-<sha>`. `itch` job (push to main or manual) skips with a notice if `ITCH_TOKEN` is unset, else pushes the artefact with `Ayowel/butler-to-itch` (pinned) to `goosey-games/${vars.ITCH_GAME || 'night-shift'}`, channel `html`, version `<root version>+<sha7>`. Linted with `@action-validator/cli` and actionlint.
+- **npm**: `mcp/scripts/bundle.js` (esbuild, `prepack`) bundles `src/server.js` + the game modules into `mcp/dist/server.js` (gitignored). The bin runs `src/` when `../game/src` exists (clone, tests, smoke) and `dist/` otherwise. Package ships bin, dist, README.md, LICENSE. `npm run verify-pack` packs, installs into a temp project, checks for `../game` imports and runs the full smoke with `SMOKE_MCP_BIN`. A test keeps `VERSION` in server.js equal to `mcp/package.json`. Not published yet.
+- **Docs**: `docs/itch/page.md` (blurb, controls, npx config, credits, itch settings: HTML, 1024x768, fullscreen button on, mobile off), `docs/ai-disclosure.md`, `mcp/README.md` (npm page). README: Play section, npx-first Connect your intern, Building and releasing.
+- **Screenshots**: `npm run screenshots` (`scripts/screenshots.js`) shoots `docs/itch/0[1-5]-*.png` at 1280x720 and `cover.png` at 630x500 with a real MCP client on the line; it refuses to shoot if a key value or ending text is on screen. Uses GENSET.CFG for Bit Rot (PAYROLL.DAT's title shows the badge key).
+- **Simon to do**: create the itch.io project, add `ITCH_TOKEN` (and `ITCH_GAME` if the slug differs), tick 'played in the browser' after the first upload, `npm publish` night-shift-mcp, submit to Game Off before 1 Dec 13:37 PST with `docs/ai-disclosure.md`.
 
 ## Week 4 milestone 1 summary
 - **State v4**: puzzles gain `by` (who made each move), `internMoves`, `noop`, `solvedBy`; ops gain `hands`; new `blame` slice; stats `playerOps`/`internOps`/`scriptedOps`. `migrateSave` (`fromV3`) refreshes definitions and keeps progress (old moves count as the player's). PROTOCOL_VERSION 3.
@@ -60,10 +69,10 @@ _Last updated: week 4, milestone 1_
 ## Architecture notes
 - The game is authoritative and streams full state. The MCP server projects the intern view (`mcp/src/projection.js`).
 - The game bridge only accepts PUZZLE_APPLY_OP / PUZZLE_ENTER_KEY / CHAT_SEND / BLAME_SUBMIT, rebuilt and stamped `actor: 'intern'`. The reducer enforces `core/permissions.js`.
-- `mcp/` imports pure game modules from `../game/src`, so publishing to npm needs a copy step.
+- `mcp/src` imports pure game modules from `../game/src`; the npm package bundles them (`mcp/dist`).
 - Windows has no destroy hook; geargrind stops its loop when its body is disconnected.
 
 ## Next (week 4, proposed; ask Simon first)
 1. **Milestone 2, audio**: Web Audio SFX and ambient hum, all generated (no assets) or tiny CC0: key clicks, CRT whine, generator (reuse the Gear Grind synth), #0117 glitch sting on ghost posts, NO CHANGE buzz, a short finale cue per ending. One master volume/mute in the tray, honouring the existing Gear Grind audio toggle; off until the first user gesture. Pure "which sound for which action" mapping tested with node:test.
 2. **Milestone 3, polish**: SETTINGS.EXE (audio, CRT/scanline toggle, reduced motion, colourblind-safe Bit Rot legend with shapes as well as colours, text size), a title screen before boot, CREDITS.TXT. Settings in localStorage, separate from the save. Playtest the hands/quota balance and Gear Grind numbers with Simon.
-3. **Milestone 4, ship**: itch.io build (zip of `game/` with relative paths), a GitHub Action that builds the zip as an artefact and optionally uploads with butler (secret `BUTLER_API_KEY`, never `GITHUB_*`), bundle the game modules into `mcp/` so `npx night-shift-mcp` works from npm, itch.io page blurb and screenshots, README install docs, and the jam AI-use disclosure (AI is in the game and helped build it).
+3. ~~**Milestone 4, ship**~~: done (see above).
