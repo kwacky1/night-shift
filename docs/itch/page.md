@@ -28,14 +28,14 @@ A shift is about 16 minutes. Progress saves in your browser.
 
 ### Controls
 
-| | |
-| --- | --- |
-| Double-click / Enter | Open a file |
-| Shift+click, Ctrl+click, drag | Select files |
-| F2 | Rename a file (8.3 names) |
-| `1`-`9`, `Z`, `R` | Bit Rot: run an op, undo, reset |
-| Space (hold) | Gear Grind: clutch |
-| Right Shift / Left Shift | Gear Grind: change up / change down (clutch in) |
+```text
+Double-click or Enter: open a file
+Shift+click, Ctrl+click, drag: select files
+F2: rename a file (8.3 names)
+1-9, Z, R: Bit Rot: run an op, undo, reset
+Space (hold): Gear Grind: clutch
+Right Shift / Left Shift: Gear Grind: change up / change down (clutch in)
+```
 
 Gear Grind keys can be rebound with **Keys...** in its window. Mouse and touch work for the clutch and gear buttons too. Engine sound is off until you turn it on.
 
@@ -88,17 +88,21 @@ This game uses AI as a mechanic (optional, bring your own agent) and AI helped b
 - Embed options:
   - Viewport dimensions: **1024 x 768**. The biggest window (BLAME.EXE, 620 x 470) and Gear Grind (540 x 415) fit with room for the desktop icons and taskbar; the E2E smoke test plays the whole night at this size.
   - Mobile friendly: **off** (it needs a keyboard for Gear Grind and F2)
-  - Automatically start on page load: on
+  - Automatically start on page load: **off** (click-to-play gives the iframe keyboard focus, which Gear Grind's Shift keys need, and lets the browser start audio)
   - Fullscreen button: **on**
   - Click to launch in fullscreen: **off**
   - Enable scrollbars: **off**
   - SharedArrayBuffer support: **off** (not needed)
 - Details:
   - Genre: **Puzzle**
-  - Tags: `game-off`, `retro`, `hacking`, `puzzle`, `programming`, `ai`, `mcp`, `1990s`, `fake-os`, `driving`
-  - AI generation disclosure: **Yes**. Code: yes (written with GitHub Copilot). Text: yes (puzzle data and story text drafted with AI, edited by Simon). Graphics: no. Sound: no.
+  - Tags (don't repeat the genre): `game-off`, `retro`, `hacking`, `programming`, `ai`, `mcp`, `1990s`, `fake-os`, `driving`, `simulation`
+  - AI generation disclosure: **Yes**. Tick **Code** and **Text & Dialog**. Leave Graphics and Sound unticked. Paste the statement below into the optional statement field.
   - App store links / community: optional
 - Cover image: `cover.png` (630 x 500)
+
+**Statement of AI usage** (for itch's optional field; condensed from `docs/ai-disclosure.md`):
+
+> Designed and directed by Simon. Most of the code, tests and docs were written with GitHub Copilot in agent sessions, and Simon playtested and reviewed every change. Puzzle data, story text and dialogue were drafted with AI and edited by Simon. No AI art or audio: the visuals are HTML/CSS/canvas and the engine sound is a code synth. In the game, AI is optional: you can bring your own MCP agent to play the intern through a local server on your machine. It only sees an allowlisted intern view, and a scripted (non-AI) intern fills in if you don't.
 - Screenshots: `01-desktop.png` to `05-blame.png`
 
 **Game Off 2026 submission:**
