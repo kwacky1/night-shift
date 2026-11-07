@@ -5,7 +5,7 @@ _Last updated: week 4, milestone 4 (ship)_
 ## Status
 - Weeks 1 to 3 are merged to `main`.
 - Week 4 milestone 1 (BLAME.EXE finale, intern balance, NO CHANGE, version handshake) is on branch `kwacky1-week-4-blame-finale`, PR open against `main`.
-- Tests: `npm test` runs 242 game + MCP tests. `npm run smoke` passes 63 E2E checks in headless Chrome (both finales and a driver mismatch included).
+- Tests: `npm test` runs 249 game + MCP tests. `npm run smoke` passes 73 E2E checks in headless Chrome (both finales and a driver mismatch included).
 - Week 4 milestone 4 (ship) is on branch `kwacky1-week-4-ship-milestone`, PR stacked on the milestone 1 PR (#4); retarget to `main` when #4 merges.
 - Milestones 2 and 3 (audio, polish) are still proposed below. Ask Simon before starting each one.
 
