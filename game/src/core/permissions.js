@@ -33,6 +33,23 @@ export const canActorUseOp = (actor, op) => opHands(op) === 'both' || opHands(op
 export const internOpsUsed = (puzzle) => (puzzle.by ?? []).filter((who) => who === 'intern').length;
 export const internOpsLeft = (puzzle) => (Number.isInteger(puzzle.internMoves) ? Math.max(0, puzzle.internMoves - internOpsUsed(puzzle)) : Infinity);
 
+// Whose hands can make the next move on a sector, as op indexes. Not a route: just who is able.
+export const nextHands = (state, puzzle) => {
+  const usable = (actor) =>
+    puzzle.ops.map((op, i) => i).filter((i) => isOpUnlocked(puzzle, i) && canActorUseOp(actor, puzzle.ops[i]) && (actor !== 'intern' || canInternUseOp(internLevel(state), puzzle.ops[i].type)));
+  const left = internOpsLeft(puzzle);
+  return { player: usable('player'), intern: left > 0 ? usable('intern') : [], internLeft: left };
+};
+
+// A remote-only op the sysadmin has asked #0118 to run. One request per op until the sector
+// changes (the intern ran something, or undo/reset) or ASK_PENDING_MS passes.
+export const ASK_PENDING_MS = 45_000;
+export const askKey = (puzzleId, opIndex) => `${puzzleId}:${opIndex}`;
+export const askPending = (asks, puzzle, opIndex, now) => {
+  const a = asks?.get?.(askKey(puzzle.id, opIndex));
+  return Boolean(a && a.moves === puzzle.history.length && now - a.at < ASK_PENDING_MS);
+};
+
 export const AUDIT_FROZEN = 'NS-02 is frozen for the Head Office audit. No more ops tonight.';
 
 // Returns a reason string if the intern may not perform this (already sanitised) action, else null.

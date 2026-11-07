@@ -2,13 +2,22 @@
 import { actions } from '../core/actions.js';
 import { toBits, toHex } from '../logic/bits.js';
 import { opLabel } from '../logic/puzzle.js';
-import { internOpsLeft, isOpUnlocked, opHands } from '../core/permissions.js';
+import { internOpsLeft, isOpUnlocked, nextHands, opHands } from '../core/permissions.js';
 import { isBitrotPowered } from '../core/power.js';
 import { esc } from './dom.js';
 
 const puzzleFor = (state, win) => state.puzzles[state.files[win.fileId]?.puzzleId];
 
-const HANDS_TAG = { player: ['CONSOLE', 'Console only: #0118 cannot run this from the line'], intern: ['#0118', 'Remote only: press to ask #0118 to run it'] };
+const HANDS_TAG = { player: ['CONSOLE', 'Console only: #0118 cannot run this from the line'], intern: ['ASK #0118', 'Remote only: you can only ask #0118 to run it'] };
+
+// "NEXT: YOU [1 3] or #0118 [2]": whose hands can make a move now (op numbers), not which move.
+export const nextText = (state, p) => {
+  const { player, intern, internLeft } = nextHands(state, p);
+  const keys = (list) => `[${list.map((i) => i + 1).join(' ')}]`;
+  const parts = [player.length && `YOU ${keys(player)}`, intern.length && `#0118 ${keys(intern)}`].filter(Boolean);
+  const out = internLeft === 0 && p.ops.some((op) => opHands(op) !== 'player') ? ' - #0118 OUT OF REMOTE OPS' : '';
+  return parts.length ? `NEXT: ${parts.join(' or ')}${out}` : 'NEXT: NOBODY - UNDO OR RESET';
+};
 
 // Pressing an op: the console runs its own ops; remote-only ones are a request down the line.
 const pressOp = (p, i, ctx) => {
@@ -57,12 +66,16 @@ export const bitrotView = {
     });
   },
 
-  render(body, state, prev, win) {
+  render(body, state, prev, win, ctx) {
     const powered = isBitrotPowered(state);
     const frozen = Boolean(state.blame?.open);
-    if (prev && prev.puzzles === state.puzzles && prev.files === state.files && isBitrotPowered(prev) === powered && Boolean(prev.blame?.open) === frozen) return;
     const p = puzzleFor(state, win);
     const root = body.querySelector('.bitrot');
+    const asked = p ? p.ops.map((op, i) => Boolean(ctx?.intern?.asked?.(p, i))) : [];
+    const askSig = asked.map(Number).join('');
+    const sameAsks = root.dataset.asks === askSig;
+    root.dataset.asks = askSig;
+    if (prev && sameAsks && prev.puzzles === state.puzzles && prev.files === state.files && prev.intern?.level === state.intern?.level && isBitrotPowered(prev) === powered && Boolean(prev.blame?.open) === frozen) return;
     if (!p) {
       root.innerHTML = '<p>No corruption found.</p>';
       return;
@@ -88,9 +101,11 @@ export const bitrotView = {
           const keyed = keyedLocked.includes(i);
           const label = keyed ? 'XOR ????' : opLabel(op);
           const hands = opHands(op);
-          const [tag, tip] = HANDS_TAG[hands] ?? [];
+          const waiting = asked[i];
+          const [tag, tip] = waiting ? ['ASKED', 'Asked. Waiting for #0118 to run it.'] : (HANDS_TAG[hands] ?? []);
           const title = keyed ? 'Keyed op: enter the override key' : tip;
-          return `<button type="button" data-cmd="op" data-op="${i}" class="${hands === 'both' ? '' : `hands-${hands}`}" ${locked || keyed ? 'disabled' : ''} ${title ? `title="${esc(title)}"` : ''}>${esc(label)}${tag ? `<small>${tag}</small>` : ''}<kbd>${i + 1}</kbd></button>`;
+          const cls = [hands === 'both' ? '' : `hands-${hands}`, waiting ? 'asked' : ''].filter(Boolean).join(' ');
+          return `<button type="button" data-cmd="op" data-op="${i}" class="${cls}" ${locked || keyed || waiting ? 'disabled' : ''} ${title ? `title="${esc(title)}"` : ''}>${esc(label)}${tag ? `<small>${tag}</small>` : ''}<kbd>${i + 1}</kbd></button>`;
         })
         .join('')}</div>
       ${
@@ -98,6 +113,7 @@ export const bitrotView = {
           ? `<form class="keyrow" data-op="${keyedLocked[0]}"><label>OVERRIDE KEY</label><input name="key" maxlength="32" placeholder="0x...." autocomplete="off" spellcheck="false" value="${esc(typedKey)}" /><button type="submit" ${powered ? '' : 'disabled'}>Enter</button></form>`
           : ''
       }
+      ${locked ? '' : `<div class="next">${esc(nextText(state, p))}</div>`}
       <div class="trail">${trail}</div>`;
     root.insertAdjacentHTML(
       'beforeend',

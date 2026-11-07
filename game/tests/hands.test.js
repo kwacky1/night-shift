@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { solve, solveTogether, validatePuzzle } from '../src/logic/puzzle.js';
-import { canActorUseOp, canInternUseOp, internActionError, internOpsLeft, levelInfo } from '../src/core/permissions.js';
+import { ASK_PENDING_MS, askKey, askPending, canActorUseOp, canInternUseOp, internActionError, internOpsLeft, levelInfo, nextHands, opHands } from '../src/core/permissions.js';
 import { reducer } from '../src/core/reducer.js';
 import { actions } from '../src/core/actions.js';
 import { createInitialState } from '../src/core/initialState.js';
@@ -140,4 +140,34 @@ test('the scripted intern runs remote-only ops when asked, and explains when it 
   assert.equal(genset.apply, false);
   assert.match(genset.text, /PROBATION interns cannot use XOR|No such/);
   assert.match(validateScript({ ...script, ask: { okLines: ['x {{key}}'], refusedLines: ['no'] } }).join('\n'), /placeholder \{\{key\}\}[\s\S]*reason/);
+});
+
+test('nextHands: whose hands can move next, within clearance and the remote quota', () => {
+  for (const p0 of puzzles) {
+    const s = atLevel(desktop(), 9);
+    const p = s.puzzles[p0.id];
+    const hands = nextHands(s, p);
+    p.ops.forEach((op, i) => {
+      const h = opHands(op);
+      const keyed = Boolean(op.keyed);
+      assert.equal(hands.player.includes(i), h !== 'intern' && !keyed, `${p.id} op ${i} player`);
+      assert.equal(hands.intern.includes(i), h !== 'player' && !keyed, `${p.id} op ${i} intern`);
+    });
+    const spent = { ...s, puzzles: { ...s.puzzles, [p.id]: { ...p, internMoves: 0 } } };
+    const none = nextHands(spent, spent.puzzles[p.id]);
+    assert.equal(none.internLeft, 0);
+    assert.deepEqual(none.intern, [], `${p.id}: out of remote ops`);
+    assert.deepEqual(none.player, hands.player);
+  }
+});
+
+test('askPending debounces a request until the board moves or it goes stale', () => {
+  const asks = new Map();
+  const p = { id: 'genset', history: [1, 2] };
+  assert.equal(askPending(asks, p, 0, 1000), false);
+  asks.set(askKey(p.id, 0), { moves: 2, at: 1000 });
+  assert.equal(askPending(asks, p, 0, 2000), true, 'no repeat request while one is pending');
+  assert.equal(askPending(asks, p, 1, 2000), false, 'other ops are separate');
+  assert.equal(askPending(asks, { ...p, history: [1, 2, 3] }, 0, 2000), false, 'a move clears it');
+  assert.equal(askPending(asks, p, 0, 1000 + ASK_PENDING_MS + 1), false, 'stale after a while');
 });
