@@ -1,13 +1,24 @@
 # Session state - NIGHT_SHIFT.EXE
 
-_Last updated: week 4, milestone 4 (ship)_
+_Last updated: week 4, intern line fallback on itch_
 
 ## Status
-- Weeks 1 to 3 are merged to `main`.
-- Week 4 milestone 1 (BLAME.EXE finale, intern balance, NO CHANGE, version handshake) is on branch `kwacky1-week-4-blame-finale`, PR open against `main`.
-- Tests: `npm test` runs 249 game + MCP tests. `npm run smoke` passes 73 E2E checks in headless Chrome (both finales and a driver mismatch included).
-- Week 4 milestone 4 (ship) is on branch `kwacky1-week-4-ship-milestone`, PR stacked on the milestone 1 PR (#4); retarget to `main` when #4 merges.
+- Weeks 1 to 3 are merged to `main`, and so are week 4 PRs #1 to #5 (itch CI upload via butler works; page is goosey-games.itch.io/night-shift, draft).
+- Branch `kwacky1-intern-line-fallback-on-itch`: INTERN.EXE handles the itch iframe (see below). PR open against `main`.
+- Tests: `npm test` runs 264 game + MCP tests. `npm run smoke` passes 81 E2E checks in headless Chrome (both finales, a driver mismatch and the itch frame included).
 - Milestones 2 and 3 (audio, polish) are still proposed below. Ask Simon before starting each one.
+
+## Intern line on itch.io
+- **Why**: Chrome/Edge Local Network Access blocks a public page from `ws://localhost` until allowed, and in a cross-origin iframe the parent must delegate `local-network-access`. itch's iframe doesn't, so the dial fails silently with no prompt. As a top-level tab, html-classic.itch.zone gets Edge's "access other apps and services on this device" prompt and connects after Allow.
+- **Dial cap** (`bridge/api.js`): `connectIntern` takes `maxAttempts` (default `DIAL_ATTEMPTS` 5, counted as failed opens in a row, reset on open) and then reports `'failed'` `{ attempts }` with no more redials. Backoff 1 to 10 s is unchanged. Quiet auto-dials still go silent (`'offline'`) after `QUIET_ATTEMPTS` and never show failed. main.js passes `maxAttempts: 1` when framed.
+- **`bridge/line.js`** (pure, `line.test.js`): `isFramed` (try/catch, a throw counts as framed), `localNetworkPermission` (feature-detects `local-network-access` then `loopback-network`, errors ignored), `dialFailure` (LINE BLOCKED BY YOUR BROWSER + own tab when framed, DIAL FAILED otherwise; the hint points at site settings when the permission is `denied`), `ownTabUrl` (same page with `?intern=` set to the dialled address).
+- **UI**: INTERN.EXE `.dial-failed` banner with Retry and OPEN IN ITS OWN TAB (`window.open(..., '_blank', 'noopener')`), status "Dial failed. Scripted intern on duty.", tray `NO LINE`. The scripted intern keeps working.
+- **Saves**: verified in real Chrome 156 / Edge 156 (Playwright disables `ThirdPartyStoragePartitioning` by default, so the check used plain launch args) that iframe localStorage is partitioned from the same origin as a top-level tab. The new tab starts its own save; the hint says so. Simon chose warn-only (no save transfer).
+- **Smoke**: a real 127.0.0.1 server frames the game on localhost with `?intern=` at a closed port. A `page.route()` parent counts as public and LNA blocks the frame itself, hence the real server.
+
+## Earlier status
+- Week 4 milestone 1 (BLAME.EXE finale, intern balance, NO CHANGE, version handshake) was on branch `kwacky1-week-4-blame-finale`, now merged.
+- Week 4 milestone 4 (ship) was on branch `kwacky1-week-4-ship-milestone`, now merged.
 
 ## Week 4 milestone 4 summary (ship)
 - **Build**: `npm run build` (`scripts/build.js`) copies `game/` minus tests into `dist/html/` and fails on any absolute or missing `src`/`href`/`import`/`fetch` path. `game/tests/build.test.js` builds into a temp dir and checks the same. Data is fetched relative to `import.meta.url`, so it works under itch's subpath iframe. `serve.js` takes `SERVE_ROOT`; `SMOKE_GAME_ROOT=dist/html npm run smoke` plays the build.

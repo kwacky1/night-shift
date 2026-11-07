@@ -25,8 +25,9 @@ export const isDoubleDown = (key) => {
 export const ui = {
   renamingId: null,
   startMenuOpen: false,
-  internStatus: 'offline', // 'offline' | 'connecting' | 'online' | 'taken' (another window has the line) | 'outdated'
+  internStatus: 'offline', // 'offline' | 'connecting' | 'online' | 'taken' (another window has the line) | 'outdated' | 'failed' (gave up dialling)
   internDriver: null, // { game, driver, text } when the intern driver is out of date
   internWarning: null, // the driver's last "could not read your state" reason, while online
+  internFailure: null, // { title, text, hint, openTab } from dialFailure() while 'failed'
   internTyping: false,
 };

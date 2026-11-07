@@ -1,6 +1,6 @@
 // End-to-end smoke test: real MCP client -> night-shift-mcp (stdio) -> WebSocket -> the real game
 // running in headless Chrome. Plays the two-sided puzzles, the 06:00 BLAME.EXE audit (with the AI
-// and with the scripted intern) and a driver version mismatch.
+// and with the scripted intern), a driver version mismatch, and the itch.io iframe with a blocked line.
 //
 //   npm run smoke            (from the repo root)
 //   CHROME_PATH=... npm run smoke   if Chrome is not in a standard location
@@ -8,6 +8,8 @@
 //   SMOKE_GAME_ROOT=dist/html       play the itch.io build instead of game/
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
+import { createServer as createNetServer } from 'node:net';
+import { createServer as createHttpServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -430,6 +432,55 @@ const run = async () => {
   const deaf = await tool('whoami');
   expect(/INTERN DRIVER OUT OF DATE/.test(deaf), 'and the tools say so in character', deaf);
   await old.screenshot({ path: `${SHOTS}/smoke-driver-old.png` });
+
+  // itch.io: the game in a cross-origin iframe, where the browser blocks the line (here: a closed
+  // port). INTERN.EXE gives up on the first failure and offers the game's own tab. The fake itch
+  // page is a real server on 127.0.0.1 (another site from localhost, but still loopback, so Local
+  // Network Access lets it frame the game; a page.route() parent counts as public and is blocked).
+  const closedPort = await new Promise((resolve) => {
+    const probe = createNetServer().listen(0, () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    });
+  });
+  const gameUrl = `http://localhost:${HTTP_PORT}/?intern=ws://localhost:${closedPort}`;
+  const embed = createHttpServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(`<!doctype html><title>itch</title><iframe src="${gameUrl}" width="1024" height="768" allow="autoplay; fullscreen *"></iframe>`);
+  });
+  await new Promise((resolve) => embed.listen(0, '127.0.0.1', resolve));
+  cleanup.push(() => embed.close());
+  const itch = await browser.newContext({ viewport: { width: 1100, height: 900 } });
+  const parent = await itch.newPage();
+  parent.on('pageerror', (err) => console.error('    page error:', err.message));
+  await parent.goto(`http://127.0.0.1:${embed.address().port}/`);
+  const frame = await (await parent.waitForSelector('iframe')).contentFrame();
+  await frame.waitForFunction(() => window.NIGHT_SHIFT);
+  await frame.evaluate(() => {
+    const { dispatch, actions } = window.NIGHT_SHIFT;
+    dispatch(actions.bootComplete());
+    dispatch(actions.clockIn());
+    dispatch(actions.openFile('intern'));
+  });
+  await frame.waitForSelector('.intern-app .dial-failed:not([hidden])', { timeout: 10000 });
+  const blocked = await frame.evaluate(() => ({
+    text: document.querySelector('.intern-app .dial-failed').textContent,
+    tab: !document.querySelector('.intern-app .open-tab').hidden,
+    tray: document.querySelector('.tray .intern').textContent,
+  }));
+  expect(/LINE BLOCKED BY YOUR BROWSER/.test(blocked.text) && /access other apps and services/.test(blocked.text) && blocked.tab, 'framed: a failed dial shows LINE BLOCKED with OPEN IN ITS OWN TAB', JSON.stringify(blocked));
+  expect(/NO LINE/.test(blocked.tray), 'and the tray says NO LINE', blocked.tray);
+  await parent.screenshot({ path: `${SHOTS}/smoke-itch-blocked.png` });
+  const [ownTab] = await Promise.all([itch.waitForEvent('page'), frame.click('.intern-app .open-tab')]);
+  await ownTab.waitForLoadState();
+  const opened = new URL(ownTab.url());
+  expect(opened.origin === `http://localhost:${HTTP_PORT}` && opened.searchParams.get('intern') === `ws://localhost:${closedPort}`, 'OPEN IN ITS OWN TAB opens the frame page top-level, dialling the same address', ownTab.url());
+  await ownTab.close();
+  const framedBefore = await frame.$$eval('.intern-app .msg.intern', (els) => els.length);
+  await frame.fill('.intern-app .compose input', 'how do I keep the power up?');
+  await frame.press('.intern-app .compose input', 'Enter');
+  await frame.waitForFunction((n) => document.querySelectorAll('.intern-app .msg.intern')  .length > n, framedBefore, { timeout: 5000 });
+  ok('the scripted intern still answers in the frame');
   console.log(`\nSmoke test passed (${step} checks). Screenshots in ${SHOTS}`);
 };
 
