@@ -3,8 +3,9 @@
 import { normalisePuzzle } from '../logic/puzzle.js';
 import { START_LEVEL } from './permissions.js';
 import { createPower } from './power.js';
+import { createBlame } from './blame.js';
 
-export const STATE_VERSION = 3;
+export const STATE_VERSION = 4;
 export const SHIFT_LENGTH = 8 * 60;
 export const DEFAULT_MS_PER_MINUTE = 2000;
 
@@ -17,9 +18,13 @@ export const gridSlot = (i) => ({ x: 12 + Math.floor(i / DESKTOP_ROWS) * ICON_W,
 
 const textOf = (content) => (Array.isArray(content) ? content.join('\n') : content ?? '');
 
-export const createStats = () => ({ internOps: 0, internKeys: 0, internMessages: 0, scriptedReplies: 0, distance: 0, stalls: 0, charged: 0 });
+export const createStats = () => ({ internOps: 0, internKeys: 0, internMessages: 0, scriptedReplies: 0, scriptedOps: 0, playerOps: 0, distance: 0, stalls: 0, charged: 0 });
 
-export const createInitialState = ({ files = [], puzzles = [], night = {}, story = {} } = {}) => {
+// A puzzle's live progress. by[i] is who applied move i ('player' | 'intern'); noop is the last
+// op that changed nothing (the board flashes NO CHANGE when its seq goes up).
+export const freshProgress = (def) => ({ value: def.start, history: [], by: [], unlocked: [], solved: false, failed: false, solvedBy: null, noop: null });
+
+export const createInitialState = ({ files = [], puzzles = [], night = {}, story = {}, blame = null } = {}) => {
   const fileMap = {
     desktop: { id: 'desktop', name: 'DESKTOP', type: 'folder', parent: null, locked: false },
   };
@@ -52,7 +57,7 @@ export const createInitialState = ({ files = [], puzzles = [], night = {}, story
   const puzzleMap = {};
   for (const p of puzzles) {
     const def = normalisePuzzle(p);
-    puzzleMap[def.id] = { ...def, value: def.start, history: [], unlocked: [], solved: false, failed: false };
+    puzzleMap[def.id] = { ...def, ...freshProgress(def) };
   }
 
   return {
@@ -78,6 +83,8 @@ export const createInitialState = ({ files = [], puzzles = [], night = {}, story
     // Story beats (data/story.json) and which have fired. The intern's projection never sees these.
     story: { beats: structuredClone(story.beats ?? []), fired: [] },
     stats: createStats(),
+    // BLAME.EXE, the 06:00 audit (data/blame.json). The intern's projection never sees the config.
+    blame: createBlame(blame),
     shiftEnd: null,
   };
 };

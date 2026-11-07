@@ -10,7 +10,8 @@ import { toBinary, toHex } from '../../game/src/logic/bits.js';
 import { opLabel, parseNumber } from '../../game/src/logic/puzzle.js';
 import { livePuzzles, pathOf } from '../../game/src/core/selectors.js';
 import { generatorSummary, isBitrotPowered, isBrownout, powerConfig, powerLevel, powerStatus } from '../../game/src/core/power.js';
-import { canInternReadFile, canInternUseOp, internLevel, isOpUnlocked, levelInfo } from '../../game/src/core/permissions.js';
+import { citeFileError, fileLines, maxEvidence, statementMax } from '../../game/src/core/blame.js';
+import { canActorUseOp, canInternReadFile, canInternUseOp, internLevel, internOpsLeft, isOpUnlocked, levelInfo, opHands } from '../../game/src/core/permissions.js';
 
 export const BADGE = '#0118';
 const HOURS = (m) => `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
@@ -36,9 +37,17 @@ export const whoami = (state) => {
     shiftLeft: HOURS(Math.max(0, state.clock.length - state.clock.elapsed)),
     sysadminPhase: state.phase,
     ...(state.shiftNumber ? { shiftNumber: state.shiftNumber } : {}),
-    ...(state.phase === 'over' ? { shiftOver: state.shiftEnd?.reason === 'blackout' ? 'BLACKOUT: the mainframe went down.' : 'The shift has ended (06:00).' } : {}),
+    ...(state.phase === 'over' ? { shiftOver: shiftOverText(state) } : {}),
+    ...(state.blame?.open ? { audit: 'OPEN: Head Office is running BLAME.EXE. See audit_status, then submit_blame.' } : {}),
     ...(state.power ? powerView(state) : {}),
   };
+};
+
+export const shiftOverText = (state) => {
+  const end = state.shiftEnd;
+  if (end?.reason === 'blackout') return 'BLACKOUT: the mainframe went down.';
+  if (end?.reason === 'audit' && end.ending) return `The audit is closed. Head Office: ${end.ending.title}. ${end.ending.text}`;
+  return 'The shift has ended (06:00).';
 };
 
 // Power is the sysadmin's job. The intern can only watch the needle and nag.
@@ -154,8 +163,16 @@ const opView = (state, p, op, index) => {
     ...(op.type === 'xor' ? { mask: keyedLocked ? null : toHex(op.mask) } : { n: op.n }),
     keyed: Boolean(op.keyed),
     locked: keyedLocked,
-    youCanUse: canInternUseOp(level, op.type),
+    hands: HANDS_TEXT[opHands(op)],
+    youCanUse: canInternUseOp(level, op.type) && canActorUseOp('intern', op),
   };
+};
+
+const HANDS_TEXT = { both: 'either of you', player: 'sysadmin only (NS-02 console)', intern: 'you only (remote line)' };
+
+const remoteLeft = (p) => {
+  const left = internOpsLeft(p);
+  return Number.isFinite(left) ? left : null;
 };
 
 export const puzzleView = (state, p) => ({
@@ -165,7 +182,7 @@ export const puzzleView = (state, p) => ({
   hint: p.hint ?? null,
   current: { hex: toHex(p.value), binary: nibbles(p.value), decimal: p.value },
   target: 'NOT VISIBLE TO YOU. The sysadmin can see it as a pattern of lit squares. Ask them.',
-  moves: { used: p.history.length, limit: p.moveLimit, left: p.moveLimit - p.history.length },
+  moves: { used: p.history.length, limit: p.moveLimit, left: p.moveLimit - p.history.length, yourRemoteOpsLeft: remoteLeft(p), yourRemoteOpsPerAttempt: p.internMoves ?? null },
   trail: [...p.history, p.value].map(toHex),
   ops: p.ops.map((op, i) => opView(state, p, op, i)),
   sysadminSeesNumbers: !(p.playerHides ?? []).includes('hex'),
@@ -176,9 +193,35 @@ export const listPuzzles = (state) => livePuzzles(state).map((p) => puzzleView(s
 
 export const readLogs = (state, limit = 20) => state.log.slice(-limit).map((l) => `[${l.at}] ${l.text}`);
 
+// Lines are numbered so they can be cited in the audit as PATH:LINE.
+export const numberLines = (content) => fileLines({ content }).map((l, i) => `${String(i + 1).padStart(3)}| ${l}`).join('\n');
+
+// BLAME.EXE as the intern sees it: who can be named, the rules of filing and the files it has read
+// tonight (readIds is tracked by the server, not the game). No weights, no endings.
+export const auditView = (state, readIds = new Set()) => {
+  const b = state.blame;
+  const config = b?.config;
+  if (!b?.open || !config) return null;
+  const read = [...readIds].map((id) => state.files[id]).filter((f) => f && !citeFileError(state, 'intern', f));
+  return {
+    audit: 'OPEN. NS-02 is frozen and the clock has stopped. Head Office wants one statement from each of you.',
+    howToFile: `submit_blame: one suspect id, up to ${maxEvidence(config)} citations as PATH:LINE (read_file numbers the lines), and why, in up to ${statementMax(config)} characters. You can only cite files you have read tonight. You get one go.`,
+    suspects: config.suspects.map(({ id, name }) => ({ id, name })),
+    filesYouHaveRead: read.map((f) => ({ path: filePath(state, f), lines: fileLines(f).length })),
+    yourStatement: b.intern ? { suspect: b.intern.suspect, evidence: b.intern.evidence.map((ref) => citePath(state, ref)), statement: b.intern.statement } : null,
+    sysadminFiled: Boolean(b.player),
+  };
+};
+
+// "badge:7" -> "C:\C_DRIVE\...\BADGE.DB:7" so the intern never has to think in file ids.
+export const citePath = (state, ref) => {
+  const [id, line] = String(ref).split(':');
+  return state.files[id] ? `${filePath(state, state.files[id])}:${line}` : ref;
+};
+
 // Ghost posts arrive on the line as #0117. Nobody has explained that to the intern either.
 const SPEAKERS = { player: 'player', intern: 'intern', system: 'system', ghost: '#0117' };
-export const chat = (state) => state.intern.messages.map((m) => ({ id: m.id, at: m.at, from: SPEAKERS[m.from] ?? m.from, text: m.text }));
+export const chat = (state) => state.intern.messages.map((m) => ({ id: m.id, at: m.at, from: SPEAKERS[m.from] ?? m.from, text: m.text, ...(m.ping ? { ping: true } : {}) }));
 
 export const parseMask = (value) => {
   const n = parseNumber(String(value ?? '').trim());

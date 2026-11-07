@@ -2,6 +2,7 @@
 // projected intern view or asks the game for one specific, allowlisted action.
 // Handlers take plain args and return MCP tool results, so they are easy to unit test.
 import { z } from 'zod';
+import { checkSubmission } from '../../game/src/core/blame.js';
 import { internActionError } from '../../game/src/core/permissions.js';
 import { toHex } from '../../game/src/logic/bits.js';
 import { parseKey } from '../../game/src/logic/words.js';
@@ -22,14 +23,64 @@ export const notConnectedText = (port) =>
     `(or load the game with ?intern=ws://localhost:${port}). Then try again.`,
   ].join('\n');
 
+export const outdatedDriverText = (mismatch) =>
+  [
+    `${mismatch.text}.`,
+    'The sysadmin\'s game is a different build from this intern driver (night-shift-mcp), so the line is dead.',
+    'Restart night-shift-mcp from the same checkout as the game (or update it), then ask the sysadmin to Redial in INTERN.EXE.',
+  ].join('\n');
+
+export const AUDIT_NAG = '\n\n(HEAD OFFICE: 06:00 AUDIT OPEN. File your statement with submit_blame. audit_status has the suspects and your citable files.)';
+const lineNoise = (reason) => `\n\n(LINE NOISE: the game's last update could not be read: ${reason}. What you see may be stale. The driver may be out of date.)`;
+
 export const createTools = (link, { port = link.port } = {}) => {
   // read_messages cursor: the highest player message id the agent has already been shown.
   let seenId = 0;
 
-  const withGame = (fn, { needsDesktop = true } = {}) => async (args = {}) => {
+  const withGame = (fn, { needsDesktop = true, auditNag = true } = {}) => async (args = {}) => {
     const state = link.state;
-    if (!link.connected || !state) return text(notConnectedText(port));
-    if (needsDesktop && state.phase === 'over') return text(state.shiftEnd?.reason === 'blackout' ? 'BLACKOUT. The mainframe is down and the shift is over. Nothing on the network until the sysadmin clocks in for another shift.' : 'It is 06:00. The shift is over. Nothing on the network until the sysadmin clocks in for another shift.');
+    if (!link.connected || !state) return text(link.mismatch ? outdatedDriverText(link.mismatch) : notConnectedText(port));
+    const res = await guarded(fn, state, args, needsDesktop);
+    if (link.lastRejection && res?.content?.[0]?.type === 'text') res.content[0].text += lineNoise(link.lastRejection);
+    const now = link.state ?? state;
+    if (auditNag && now.blame?.open && !now.blame.intern && !now.shiftEnd && res?.content?.[0]?.type === 'text') res.content[0].text += AUDIT_NAG;
+    return res;
+  };
+
+  const overText = (state) => {
+    const reason = state.shiftEnd?.reason;
+    if (reason === 'blackout') return 'BLACKOUT. The mainframe is down and the shift is over. Nothing on the network until the sysadmin clocks in for another shift.';
+    if (reason === 'audit') return `${view.shiftOverText(state)}\nThe shift is over. Nothing on the network until the sysadmin clocks in for another shift.`;
+    return 'It is 06:00. The shift is over. Nothing on the network until the sysadmin clocks in for another shift.';
+  };
+
+  // Files the agent has actually read, per shift. Only these can be cited in the audit.
+  const reads = new Map();
+  const readSet = (state) => {
+    const key = state.shiftNumber ?? 1;
+    if (!reads.has(key)) reads.set(key, new Set());
+    return reads.get(key);
+  };
+
+  const resolveSuspect = (config, query) => {
+    const q = String(query ?? '').trim().toLowerCase().replace(/^#/, '');
+    const byId = config.suspects.find((s) => s.id.toLowerCase() === q);
+    if (byId) return byId.id;
+    const byName = config.suspects.filter((s) => s.name.toLowerCase().includes(q));
+    return q && byName.length === 1 ? byName[0].id : null;
+  };
+
+  const resolveCitation = (state, cite) => {
+    const m = /^(.+):(\d{1,4})$/.exec(String(cite).trim());
+    if (!m) return { error: `"${cite}" is not a citation. Use PATH:LINE, e.g. MEMO_01.TXT:3.` };
+    const { file, error } = view.resolveFile(state, m[1]);
+    if (error) return { error };
+    if (!readSet(state).has(file.id)) return { error: `You have not read ${view.filePath(state, file)} tonight. read_file it first: you can only cite what you have read.` };
+    return { ref: `${file.id}:${Number(m[2])}` };
+  };
+
+  const guarded = async (fn, state, args, needsDesktop) => {
+    if (needsDesktop && state.phase === 'over') return text(overText(state));
     if (needsDesktop && state.phase !== 'desktop') return text('The sysadmin has not clocked in yet. Nothing on the network until they do.');
     try {
       return await fn(state, args);
@@ -39,11 +90,12 @@ export const createTools = (link, { port = link.port } = {}) => {
     }
   };
 
+  // The 06:00 audit ping wakes read_messages/wait_for_player like a player message does.
   const unreadPlayerMessages = (state) => {
     const msgs = view.chat(state);
     const maxId = msgs.at(-1)?.id ?? 0;
     if (maxId < seenId) seenId = 0; // the game was reset
-    return msgs.filter((m) => m.from === 'player' && m.id > seenId);
+    return msgs.filter((m) => (m.from === 'player' || m.ping) && m.id > seenId);
   };
 
   const formatMessages = (msgs) => msgs.map((m) => `[${m.at}] ${m.from === 'player' ? 'SYSADMIN' : m.from === 'intern' ? 'YOU (#0118)' : m.from === '#0117' ? '#0117' : 'SYSTEM'}: ${m.text}`).join('\n');
@@ -56,6 +108,7 @@ export const createTools = (link, { port = link.port } = {}) => {
 
   // Run one allowlisted action in the game and describe the puzzle afterwards.
   const runOp = async (puzzle, opIndex, extra = []) => {
+    const before = link.state.puzzles[puzzle.id].history.length;
     for (const action of [...extra, { type: 'PUZZLE_APPLY_OP', puzzleId: puzzle.id, opIndex }]) {
       const denied = internActionError(link.state, { ...action, actor: 'intern' });
       if (denied) return text(denied);
@@ -64,6 +117,8 @@ export const createTools = (link, { port = link.port } = {}) => {
     }
     const after = view.puzzleView(link.state, link.state.puzzles[puzzle.id]);
     const op = after.ops[opIndex];
+    if (link.state.puzzles[puzzle.id].history.length === before)
+      return text(`NO CHANGE: ${op.label} leaves ${after.current.hex} exactly as it was. No move used. Moves ${after.moves.used}/${after.moves.limit}.`);
     const lines = [`Applied ${op.label}. CURRENT is now ${after.current.hex} (${after.current.binary}). Moves ${after.moves.used}/${after.moves.limit}.`];
     if (after.status === 'RECOVERED') lines.push('SECTOR RECOVERED. Nice work. Tell the sysadmin.');
     else if (after.status.startsWith('OUT')) lines.push('Out of moves. Ask the sysadmin to undo or reset.');
@@ -119,7 +174,10 @@ export const createTools = (link, { port = link.port } = {}) => {
         const { file, error } = view.resolveFile(state, path);
         if (error) return fail(error);
         const r = view.readFile(state, file);
-        return r.error ? text(r.error) : text(`--- ${view.filePath(state, file)} ---\n${r.text}`);
+        if (r.error) return text(r.error);
+        if (file.type === 'app') return text(`--- ${view.filePath(state, file)} ---\n${r.text}`);
+        readSet(state).add(file.id);
+        return text(`--- ${view.filePath(state, file)} ---\n${view.numberLines(r.text)}`);
       }),
     },
     {
@@ -206,6 +264,49 @@ export const createTools = (link, { port = link.port } = {}) => {
         const unlocked = (link.state.puzzles[puzzle.id].unlocked ?? []).includes(opIndex);
         return text(unlocked ? `Key accepted. ${view.puzzleView(link.state, link.state.puzzles[puzzle.id]).ops[opIndex].label} is unlocked for both of you.` : `KEY REJECTED: ${toHex(value)} is not it.`);
       }),
+    },
+    {
+      name: 'audit_status',
+      title: 'Head Office audit (BLAME.EXE)',
+      description: 'During the 06:00 audit: the suspects, how to file, the files you have read tonight (citable) and whether the sysadmin has filed yet.',
+      inputSchema: {},
+      handler: withGame(async (state) => {
+        const audit = view.auditView(state, readSet(state));
+        return audit ? json('BLAME.EXE', audit) : text('There is no audit running. Head Office will announce it.');
+      }, { auditNag: false }),
+    },
+    {
+      name: 'submit_blame',
+      title: 'File your audit statement',
+      description:
+        'Only during the 06:00 audit. Name who you blame (a suspect id from audit_status), cite up to 3 lines as PATH:LINE from files you have read tonight (read_file numbers the lines), and say why in one or two sentences. One go only; it cannot be changed.',
+      inputSchema: {
+        suspect: z.string().min(1).max(64).describe('Suspect id from audit_status, e.g. 0117'),
+        evidence: z.array(z.string().min(1).max(160)).max(8).optional().describe('Citations as PATH:LINE, e.g. ["C:\\C_DRIVE\\MEMOS\\MEMO_01.TXT:3"]'),
+        statement: z.string().max(500).optional().describe('Why, in your own words (short)'),
+      },
+      handler: withGame(async (state, { suspect, evidence = [], statement = '' }) => {
+        const config = state.blame?.config;
+        if (!state.blame?.open || !config) return text('There is no audit running. Head Office will announce it.');
+        if (state.blame.intern) return text('You already filed your statement. Head Office does not take corrections.');
+        const id = resolveSuspect(config, suspect);
+        if (!id) return fail(`Unknown suspect "${suspect}". Pick one of: ${config.suspects.map((s) => `${s.id} (${s.name})`).join(', ')}.`);
+        const refs = [];
+        for (const cite of evidence) {
+          const r = resolveCitation(state, cite);
+          if (r.error) return fail(r.error);
+          refs.push(r.ref);
+        }
+        const action = { type: 'BLAME_SUBMIT', suspect: id, evidence: refs, statement };
+        const { error } = checkSubmission(state, 'intern', action);
+        if (error) return fail(error);
+        const denied = internActionError(state, { ...action, actor: 'intern' });
+        if (denied) return text(denied);
+        const res = await link.dispatch(action);
+        if (!res.ok) return text(`The game refused: ${res.error}`);
+        if (link.state.phase === 'over') return text(`Statement filed. Both statements are in.\n${view.shiftOverText(link.state)}`);
+        return text('Statement filed with Head Office. The verdict comes once the sysadmin files theirs. (wait_for_player while you wait)');
+      }, { auditNag: false }),
     },
     {
       name: 'message_player',

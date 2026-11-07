@@ -31,6 +31,19 @@ export const livePuzzles = (state) => {
   return Object.values(state.puzzles ?? {}).filter((p) => live.has(p.id));
 };
 
+// WAIT FOR THE AUDIT: once every sector is recovered the sysadmin can park the generator and run
+// the clock at FAST_FORWARD x until 06:00. One way: there is no un-wait.
+export const FAST_FORWARD = 8;
+export const allSectorsRecovered = (state) => {
+  const all = Object.values(state.puzzles ?? {});
+  return all.length > 0 && all.every((p) => p.solved);
+};
+export const canWaitForAudit = (state) =>
+  state.phase === 'desktop' && !state.blame?.open && !state.clock?.waiting && state.clock.elapsed < state.clock.length && allSectorsRecovered(state);
+export const isWaitingForAudit = (state) => state.phase === 'desktop' && Boolean(state.clock?.waiting) && !state.blame?.open;
+// Real milliseconds per game minute right now.
+export const tickMs = (state, fallback = 2000) => (state.clock?.msPerMinute || fallback) / (isWaitingForAudit(state) ? FAST_FORWARD : 1);
+
 export const pathOf = (state, id) => {
   const parts = [];
   for (let f = state.files[id]; f; f = state.files[f.parent]) parts.unshift(f.id === 'desktop' ? 'C:' : f.name);

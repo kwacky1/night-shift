@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { parseArgs, INSTRUCTIONS } from '../src/server.js';
+import { readFileSync } from 'node:fs';
+import { parseArgs, INSTRUCTIONS, VERSION } from '../src/server.js';
 
 const BIN = fileURLToPath(new URL('../bin/night-shift-mcp.js', import.meta.url));
 
@@ -17,8 +18,12 @@ test('parseArgs reads flags and env', () => {
   assert.throws(() => parseArgs(['--rm-rf'], {}), /Unknown option/);
 });
 
+test('the server reports the npm package version', () => {
+  assert.equal(VERSION, JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version);
+});
+
 test('the persona does not spoil solutions', () => {
-  for (const spoiler of ['0x0117', '0x0FF0', '0x3C3C', 'zero, one, one, seven', 'NS-02']) assert.ok(!INSTRUCTIONS.includes(spoiler), spoiler);
+  for (const spoiler of ['0x0117', '0x0FF0', '0x3C3C', 'zero, one, one, seven', 'NS-02', 'ending', 'twist', 'weight', 'typing', 'one keyboard', 'Patterson']) assert.ok(!INSTRUCTIONS.includes(spoiler), spoiler);
 });
 
 test('stdio server: instructions, intern-only tools, in-character offline replies', async () => {
@@ -29,7 +34,7 @@ test('stdio server: instructions, intern-only tools, in-character offline replie
     assert.match(client.getInstructions(), /intern #0118/);
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
-    assert.deepEqual(names, ['enter_key', 'inspect_puzzle', 'list_files', 'message_player', 'read_file', 'read_logs', 'read_messages', 'shift_left', 'shift_right', 'wait_for_player', 'whoami', 'xor']);
+    assert.deepEqual(names, ['audit_status', 'enter_key', 'inspect_puzzle', 'list_files', 'message_player', 'read_file', 'read_logs', 'read_messages', 'shift_left', 'shift_right', 'submit_blame', 'wait_for_player', 'whoami', 'xor']);
     assert.ok(!names.some((n) => /dispatch|hydrate|reset|undo/i.test(n)));
     const res = await client.callTool({ name: 'whoami', arguments: {} });
     assert.match(res.content[0].text, /NO CARRIER/);

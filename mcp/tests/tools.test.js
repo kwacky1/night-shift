@@ -1,10 +1,13 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
-import { GameLink, isAllowedOrigin, isLocalHostHeader } from '../src/link.js';
+import { DRIVER_VERSION, GameLink, isAllowedOrigin, isLocalHostHeader } from '../src/link.js';
 import { createTools, notConnectedText } from '../src/tools.js';
 import { actions } from '../../game/src/core/actions.js';
-import { FakeGame, newStore, waitFor } from './fake-game.js';
+import { createStore } from '../../game/src/core/store.js';
+import { reducer } from '../../game/src/core/reducer.js';
+import { createInitialState } from '../../game/src/core/initialState.js';
+import { FakeGame, gameData, newStore, waitFor } from './fake-game.js';
 
 let link;
 let tools;
@@ -101,6 +104,42 @@ test('invalid and oversized messages from the game are dropped', async () => {
   assert.ok(link.connected);
 });
 
+test('handshake: a matching game is welcomed', async () => {
+  await connectGame();
+  await waitFor(() => game.received.some((m) => m.type === 'welcome'));
+  const welcome = game.received.find((m) => m.type === 'welcome');
+  assert.deepEqual([welcome.protocol, welcome.version], [DRIVER_VERSION.protocol, DRIVER_VERSION.version]);
+  assert.equal(link.mismatch, null);
+});
+
+test('handshake: a game from another build is rejected, and the tools say so in character', async () => {
+  const old = new FakeGame();
+  game = old;
+  await old.connect(link.port, { hello: { protocol: 2, version: 3 } });
+  await waitFor(() => old.closeCode === 4003);
+  const reject = old.received.find((m) => m.type === 'reject');
+  assert.deepEqual(reject.driver, DRIVER_VERSION);
+  assert.equal(link.connected, false);
+  const res = await call('whoami');
+  assert.match(res.text, new RegExp(`INTERN DRIVER OUT OF DATE \\(game v2\\.3, driver v${DRIVER_VERSION.protocol}\\.${DRIVER_VERSION.version}\\)`));
+  assert.match(res.text, /Restart night-shift-mcp/);
+  // The right build dials in: the line comes back.
+  await connectGame();
+  assert.match((await call('whoami')).text, /PROBATION/);
+});
+
+test('a state the driver cannot read is flagged as LINE NOISE, not dropped silently', async () => {
+  await connectGame();
+  const s = game.store.getState();
+  game.send({ type: 'state', action: 'TICK', state: { ...s, phase: 'x'.repeat(40) } });
+  await waitFor(() => game.received.some((m) => m.type === 'warn'));
+  assert.match(game.received.find((m) => m.type === 'warn').reason, /phase/);
+  assert.match((await call('whoami')).text, /LINE NOISE.*phase/s);
+  game.playerSays('back to normal');
+  await waitFor(() => link.lastRejection === null);
+  assert.doesNotMatch((await call('whoami')).text, /LINE NOISE/);
+});
+
 test('the link forgets the game when it disconnects', async () => {
   await connectGame();
   game.close();
@@ -174,13 +213,16 @@ test('PROBATION interns can shift but not XOR', async () => {
 test('end to end: solve payroll together, get promoted, read the key, recover the badge', async () => {
   await connectGame();
   const store = game.store;
-  // Payroll: intern shifts, the sysadmin does the XOR they are not cleared for yet.
+  // Payroll: >>3 is the intern's alone, the XOR is the console's, and the intern gets 2 remote ops.
   await call('shift_right', { puzzle: 'PAYROLL.DAT' });
   store.dispatch(actions.applyOp('payroll', 2));
   await waitFor(() => link.state.puzzles.payroll.value === 0x0f0f);
   await call('shift_left', { puzzle: 'payroll' });
-  const promoted = await call('shift_left', { puzzle: 'payroll' });
-  assert.match(promoted.text, /SECTOR RECOVERED/);
+  assert.match((await call('shift_left', { puzzle: 'payroll' })).text, /REMOTE QUOTA/);
+  store.dispatch(actions.applyOp('payroll', 0));
+  await waitFor(() => link.state.puzzles.payroll.solved);
+  const promoted = await call('read_file', { path: 'PAYROLL.DAT' });
+  assert.match(promoted.text, /PAYROLL EXTRACT/);
   assert.match((await call('whoami')).text, /OPERATOR/);
 
   // NS-02.LOG opens up and spells out the key in words.
@@ -198,9 +240,11 @@ test('end to end: solve payroll together, get promoted, read the key, recover th
   const keyed = await call('xor', { puzzle: 'badge', mask: '0117' });
   assert.match(keyed.text, /Applied XOR 0x0117/);
   assert.deepEqual(store.getState().puzzles.badge.unlocked, [3]);
-  await call('shift_left', { puzzle: 'badge' });
-  const done = await call('xor', { puzzle: 'badge', mask: '0xFF00' });
-  assert.match(done.text, /SECTOR RECOVERED/);
+  assert.match((await call('shift_left', { puzzle: 'badge' })).text, /CONSOLE ONLY/);
+  store.dispatch(actions.applyOp('badge', 0));
+  await waitFor(() => link.state.puzzles.badge.value === 0xf0f0);
+  assert.match((await call('xor', { puzzle: 'badge', mask: '0xFF00' })).text, /REMOTE QUOTA/);
+  store.dispatch(actions.applyOp('badge', 2));
   assert.equal(store.getState().puzzles.badge.solved, true);
 });
 
@@ -249,4 +293,80 @@ test('after 06:00 the tools say the shift is over', async () => {
   await waitFor(() => link.state.phase === 'over');
   assert.match((await call('list_files')).text, /shift is over/);
   assert.match((await call('whoami')).text, /shiftOver/);
+});
+
+// The 06:00 audit, with the generator drain off so the night survives the clock jump.
+const auditStore = () => {
+  const data = { ...gameData, night: { ...gameData.night, power: { ...gameData.night.power, drainPerMinute: 0 } } };
+  const store = createStore(reducer, createInitialState(data));
+  store.dispatch(actions.bootComplete());
+  store.dispatch(actions.clockIn());
+  store.dispatch(actions.tick(420));
+  store.dispatch(actions.tick(60));
+  return store;
+};
+
+test('read_file numbers lines so they can be cited', async () => {
+  await connectGame();
+  const { text } = await call('read_file', { path: 'BOOTLOG.TXT' });
+  assert.match(text, /^ {2}1\| /m);
+  assert.match(text, /^ {2}4\| /m);
+});
+
+test('audit: no audit before 06:00, and submit_blame refuses politely', async () => {
+  await connectGame();
+  assert.match((await call('audit_status')).text, /no audit running/);
+  assert.match((await call('submit_blame', { suspect: '0117' })).text, /no audit running/);
+});
+
+test('audit: audit_status shows suspects and read files, never the verdict rules', async () => {
+  const store = auditStore();
+  assert.equal(store.getState().blame.open, true);
+  await connectGame(store);
+  assert.match((await call('whoami')).text, /"audit": "OPEN/);
+  await call('read_file', { path: 'BOOTLOG.TXT' });
+  const { text } = await call('audit_status');
+  assert.match(text, /"id": "0117"/);
+  assert.match(text, /BOOTLOG\.TXT/);
+  assert.match(text, /"sysadminFiled": false/);
+  assert.doesNotMatch(text, /points|clears|endings|tags|weight|verdict/i);
+  assert.ok(!JSON.stringify(link.state.blame).match(/points|endings|scripted/), 'the schema strips the verdict config');
+});
+
+test('audit: opening it pings #0118 in read_messages and on every tool result until it files', async () => {
+  const store = auditStore();
+  await connectGame(store);
+  const msgs = await call('read_messages');
+  assert.match(msgs.text, /SYSTEM: 06:00 AUDIT OPEN\. #0118: file with submit_blame/);
+  assert.match(msgs.text, /HEAD OFFICE: 06:00 AUDIT OPEN/);
+  assert.match((await call('whoami')).text, /HEAD OFFICE: 06:00 AUDIT OPEN\. File your statement with submit_blame/);
+  assert.doesNotMatch((await call('audit_status')).text, /HEAD OFFICE: 06:00/);
+  assert.match((await call('read_messages')).text, /No new messages/, 'the ping is read once');
+  const filed = await call('submit_blame', { suspect: '0117' });
+  assert.doesNotMatch(filed.text, /HEAD OFFICE: 06:00 AUDIT OPEN/);
+  await waitFor(() => link.state?.blame?.intern || link.state?.shiftEnd);
+  assert.doesNotMatch((await call('read_messages', { all: true })).text, /\(HEAD OFFICE: 06:00/);
+});
+
+test('audit: citations must be files the intern has read, and the verdict comes back', async () => {
+  const store = auditStore();
+  await connectGame(store);
+  const unread = await call('submit_blame', { suspect: 'sysadmin', evidence: ['BOOTLOG.TXT:4'] });
+  assert.equal(unread.isError, true);
+  assert.match(unread.text, /have not read/);
+  await call('read_file', { path: 'BOOTLOG.TXT' });
+  assert.match((await call('submit_blame', { suspect: 'nobody' })).text, /Unknown suspect/);
+  assert.match((await call('submit_blame', { suspect: 'sysadmin', evidence: ['BOOTLOG.TXT:999'] })).text, /has lines 1-/);
+  const filed = await call('submit_blame', { suspect: '#0117', evidence: ['BOOTLOG.TXT:4'], statement: 'It was the last bloke.' });
+  assert.match(filed.text, /Statement filed/);
+  await waitFor(() => link.state.blame.intern);
+  assert.deepEqual(store.getState().blame.intern.evidence, ['bootlog:4']);
+  assert.match((await call('submit_blame', { suspect: '0117' })).text, /already filed/);
+  assert.match((await call('audit_status')).text, /BOOTLOG\.TXT:4/);
+  assert.match((await call('shift_left', { puzzle: 'payroll' })).text, /audit/i);
+  store.dispatch(actions.blameSubmit('0117'));
+  await waitFor(() => link.state.phase === 'over');
+  assert.equal(link.state.shiftEnd.reason, 'audit');
+  assert.match((await call('whoami')).text, /audit is closed\. Head Office: /);
+  assert.match((await call('read_logs')).text, /shift is over/);
 });

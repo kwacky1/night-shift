@@ -138,6 +138,8 @@
   {
     "id": "blame",
     "name": "BLAME.EXE",
+    "type": "app",
+    "app": "blame",
     "parent": "desktop",
     "dormant": true,
     "locked": true,

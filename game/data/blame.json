@@ -1,0 +1,119 @@
+{
+  "file": "blame",
+  "maxEvidence": 3,
+  "statementMax": 140,
+  "accusationWeight": 1,
+  "suspects": [
+    { "id": "0117", "name": "#0117 (former night sysadmin)" },
+    { "id": "sysadmin", "name": "The night sysadmin at NS-02" },
+    { "id": "0118", "name": "#0118 (the intern)" },
+    { "id": "patterson", "name": "R. Patterson (Facilities)" },
+    { "id": "headoffice", "name": "Head Office" }
+  ],
+  "evidence": [
+    { "ref": "payroll:8", "points": { "0117": 1 } },
+    { "ref": "payroll:13", "points": { "0117": 1 } },
+    { "ref": "payroll:15", "points": { "0117": 1, "headoffice": 1 } },
+    { "ref": "badge:7", "points": { "0117": 1, "sysadmin": 1 }, "tags": ["yourname"] },
+    { "ref": "badge:10", "points": { "0117": 1 } },
+    { "ref": "badge:11", "points": { "sysadmin": 1 }, "tags": ["yourname"] },
+    { "ref": "badge:12", "points": { "sysadmin": 2 }, "tags": ["yourname"] },
+    { "ref": "shiftlog:4", "points": { "0117": 1 }, "clears": ["0117"] },
+    { "ref": "shiftlog:5", "points": { "0117": 1, "sysadmin": 1 } },
+    { "ref": "shiftlog:6", "clears": ["0117"] },
+    { "ref": "shiftlog:7", "points": { "0117": 1, "patterson": 1 } },
+    { "ref": "shiftlog:8", "points": { "0118": 1 }, "clears": ["0117"], "tags": ["onekeyboard"] },
+    { "ref": "shiftlog:13", "points": { "0117": 1 } },
+    { "ref": "genset:3", "points": { "patterson": 2 } },
+    { "ref": "genset:4", "points": { "0117": 1, "sysadmin": 1 } },
+    { "ref": "genset:5", "points": { "0117": 1, "sysadmin": 1 } },
+    { "ref": "genset:7", "points": { "sysadmin": 1 }, "clears": ["patterson"] },
+    { "ref": "timeclk:6", "points": { "0117": 1, "headoffice": 1 } },
+    { "ref": "timeclk:9", "points": { "0118": 1 } },
+    { "ref": "timeclk:10", "points": { "0117": 1 } },
+    { "ref": "timeclk:12", "points": { "0118": 2 }, "tags": ["onekeyboard"] },
+    { "ref": "timeclk:13", "points": { "0118": 1 }, "tags": ["onekeyboard"] },
+    { "ref": "bootlog:4", "points": { "0118": 2 }, "tags": ["onekeyboard"] },
+    { "ref": "bootlog:5", "points": { "sysadmin": 1 }, "tags": ["yourname"] },
+    { "ref": "bootlog:7", "points": { "0117": 1 } },
+    { "ref": "ns02log:6", "points": { "0117": 1 } },
+    { "ref": "ns02log:8", "points": { "0118": 2 }, "clears": ["0117"], "tags": ["onekeyboard"] },
+    { "ref": "timeaud:7", "points": { "0117": 1, "headoffice": 1 } },
+    { "ref": "timeaud:8", "points": { "0117": 1 } },
+    { "ref": "sealed:5", "points": { "0117": 2 } },
+    { "ref": "sealed:7", "clears": ["0117"] },
+    { "ref": "sealed:9", "points": { "headoffice": 1, "sysadmin": 1 } },
+    { "ref": "sealed:11", "points": { "headoffice": 1 } },
+    { "ref": "memo1:4", "points": { "headoffice": 2 } },
+    { "ref": "memo1:5", "points": { "headoffice": 1, "0118": 1 } },
+    { "ref": "memo2:4", "points": { "patterson": 1 } },
+    { "ref": "memo2:6", "points": { "sysadmin": 1 } },
+    { "ref": "memo3:4", "points": { "0117": 1 } },
+    { "ref": "autoexec:5", "points": { "0117": 1 } },
+    { "ref": "readme:17", "points": { "headoffice": 1 } },
+    { "ref": "trash1:3", "points": { "sysadmin": 1 } }
+  ],
+  "facts": [
+    { "id": "stalled", "when": { "stat": "stalls", "min": 1 }, "points": { "sysadmin": 1 } },
+    { "id": "internActed", "when": { "stat": "internOps", "min": 1 }, "points": { "0118": 1 } },
+    { "id": "internSolved", "when": { "solvedBy": "intern", "min": 1 }, "points": { "0118": 1 } },
+    { "id": "payrollByPlayer", "when": { "movesBy": { "puzzle": "payroll", "actor": "player" }, "min": 1 }, "points": { "sysadmin": 1 } },
+    { "id": "scriptedHelp", "when": { "stat": "scriptedOps", "min": 1 } }
+  ],
+  "endings": [
+    {
+      "id": "typing",
+      "title": "WHO IS TYPING",
+      "when": { "verdict": ["0118"], "tags": { "onekeyboard": 2 }, "any": [{ "facts": ["internActed"] }, { "facts": ["scriptedHelp"] }] },
+      "text": "Verdict: #0118. Head Office checks the intern terminal. There isn't one. One keyboard, one peer on localhost, every op tonight typed at NS-02. The line is still open. Whoever is typing as #0118: see you at 22:00."
+    },
+    {
+      "id": "both",
+      "title": "BOTH OF YOU",
+      "when": { "player": ["0118"], "intern": ["sysadmin"] },
+      "text": "Two statements, each naming the other. Head Office files both under terminal NS-02, which is both of you. You are each placed on probation, supervised by the other. The intern's line stays open after you hang up."
+    },
+    {
+      "id": "yourname",
+      "title": "YOUR NAME",
+      "when": { "any": [{ "verdict": ["sysadmin"] }, { "verdict": ["0117"], "tags": { "yourname": 1 } }] },
+      "text": "The report names the sysadmin at NS-02. Security pulls the badge on record for NS-02 tonight: 0117. Please return it on your way out. You are already on your way out. Statement on file: 'that was not me'."
+    },
+    {
+      "id": "again",
+      "title": "AGAIN",
+      "when": { "verdict": ["0117"] },
+      "text": "#0117 is blamed. Again. The record is sealed. Again. At 06:01 a badge swipes in at NS-02. The screen says: 'that was not me.' Nobody is there to read it. Yet."
+    },
+    {
+      "id": "management",
+      "title": "ACTS OF MANAGEMENT",
+      "when": { "verdict": ["headoffice", "patterson"] },
+      "text": "The report names {{name}}. Head Office reviews it, finds Head Office blameless, and files it under Policy. The throttle stays stuck open. See you tonight."
+    },
+    {
+      "id": "equipment",
+      "title": "FILED UNDER EQUIPMENT",
+      "text": "No one name sticks. Head Office blames Generator 2 and books a technician for 1998. The logs still only name the terminal. Somebody will have to sit at it tonight."
+    }
+  ],
+  "scripted": [
+    {
+      "facts": ["stalled"],
+      "suspect": "sysadmin",
+      "evidence": ["memo2:6", "genset:5", "badge:12"],
+      "statement": "It stalled on their watch. Again. I was on the line all night and I can't even reach the pedals. Not my fault. Probably."
+    },
+    {
+      "facts": ["payrollByPlayer"],
+      "suspect": "sysadmin",
+      "evidence": ["shiftlog:5", "badge:12", "bootlog:5"],
+      "statement": "Payroll was changed from NS-02 tonight. I am not at NS-02. The sysadmin is. I'm just a voice on a wire."
+    },
+    {
+      "suspect": "sysadmin",
+      "evidence": ["badge:12", "trash1:3"],
+      "statement": "The logs name NS-02. The sysadmin sits at NS-02. Also they want to never work nights again. Motive. I rest my case."
+    }
+  ]
+}

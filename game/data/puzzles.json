@@ -6,10 +6,11 @@
     "start": "0x0003",
     "target": "0x3C3C",
     "moveLimit": 6,
+    "internMoves": 2,
     "ops": [
       { "type": "shl", "n": 1 },
-      { "type": "shr", "n": 3 },
-      { "type": "xor", "mask": "0x0F0F" }
+      { "type": "shr", "n": 3, "hands": "intern" },
+      { "type": "xor", "mask": "0x0F0F", "hands": "player" }
     ],
     "onSolve": {
       "internLevel": 2,
@@ -24,9 +25,10 @@
     "target": "0x0FF0",
     "moveLimit": 6,
     "playerHides": ["hex"],
+    "internMoves": 2,
     "ops": [
-      { "type": "shl", "n": 4 },
-      { "type": "shr", "n": 1 },
+      { "type": "shl", "n": 4, "hands": "player" },
+      { "type": "shr", "n": 1, "hands": "player" },
       { "type": "xor", "mask": "0xFF00" },
       { "type": "xor", "mask": "0x0117", "keyed": true }
     ]
@@ -38,10 +40,11 @@
     "start": "0x0F00",
     "target": "0x0F33",
     "moveLimit": 7,
+    "internMoves": 3,
     "ops": [
       { "type": "shl", "n": 1 },
-      { "type": "shr", "n": 2 },
-      { "type": "xor", "mask": "0x0FF0" }
+      { "type": "shr", "n": 2, "hands": "player" },
+      { "type": "xor", "mask": "0x0FF0", "hands": "intern" }
     ],
     "onSolve": {
       "drainScale": 0.6,
@@ -56,9 +59,10 @@
     "target": "0x0718",
     "moveLimit": 6,
     "playerHides": ["hex"],
+    "internMoves": 2,
     "ops": [
-      { "type": "shl", "n": 4 },
-      { "type": "shr", "n": 4 },
+      { "type": "shl", "n": 4, "hands": "player" },
+      { "type": "shr", "n": 4, "hands": "intern" },
       { "type": "xor", "mask": "0x00F0" },
       { "type": "xor", "mask": "0x0600", "keyed": true }
     ],

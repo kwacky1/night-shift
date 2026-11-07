@@ -87,10 +87,12 @@ const applyEffect = (state, e, h) => {
     case 'internLevel':
       return h.setInternLevel(state, e.level, e.message);
     case 'drain': {
+      if (state.clock?.waiting) return state; // parked for the audit: the surge misses it
       const s = drainPower(state, e.amount ?? 0);
       return { ...s, power: { ...s.power, surgeSeq: (s.power.surgeSeq ?? 0) + 1 } };
     }
     case 'stall':
+      if (state.clock?.waiting) return state;
       return { ...state, power: { ...state.power, stallSeq: (state.power.stallSeq ?? 0) + 1 } };
     default:
       return state;

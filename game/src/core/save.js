@@ -7,6 +7,18 @@ import { shiftMinutes } from './story.js';
 
 const PLAYABLE = ['desktop', 'over'];
 
+// Saved puzzle progress laid over the current puzzle definitions (data changes reach old saves).
+const mergePuzzles = (fresh, saved) => {
+  const puzzles = { ...fresh };
+  for (const [id, p] of Object.entries(saved ?? {})) {
+    if (!puzzles[id]) continue;
+    const { value, history = [], unlocked, solved, failed } = p;
+    const by = Array.isArray(p.by) && p.by.length === history.length ? p.by : history.map(() => 'player');
+    puzzles[id] = { ...puzzles[id], value, history, by, unlocked: unlocked ?? [], solved: Boolean(solved), failed: Boolean(failed), solvedBy: p.solvedBy ?? (solved ? 'player' : null) };
+  }
+  return puzzles;
+};
+
 // Week 2 (v2) saves: keep what the player did (names, locks, puzzle progress, chat), take
 // everything else (new files, power, story) from the fresh data.
 const fromV2 = (saved, data) => {
@@ -15,12 +27,7 @@ const fromV2 = (saved, data) => {
   for (const [id, f] of Object.entries(saved.files ?? {})) {
     if (files[id]) files[id] = { ...files[id], name: f.name ?? files[id].name, locked: Boolean(f.locked) };
   }
-  const puzzles = { ...fresh.puzzles };
-  for (const [id, p] of Object.entries(saved.puzzles ?? {})) {
-    if (!puzzles[id]) continue;
-    const { value, history, unlocked, solved, failed } = p;
-    puzzles[id] = { ...puzzles[id], value, history: history ?? [], unlocked: unlocked ?? [], solved: Boolean(solved), failed: Boolean(failed) };
-  }
+  const puzzles = mergePuzzles(fresh.puzzles, saved.puzzles);
   const { shiftOver, ...flags } = saved.flags ?? {};
   return {
     ...fresh,
@@ -41,12 +48,32 @@ const fromV2 = (saved, data) => {
   };
 };
 
+// Week 3 (v3) saves: the same shift carries on. Puzzle and file definitions (hands, quotas,
+// BLAME.EXE) and the story text come from the current data; progress comes from the save.
+const fromV3 = (saved, data) => {
+  const fresh = createInitialState(data);
+  const files = { ...fresh.files };
+  for (const [id, f] of Object.entries(saved.files ?? {})) {
+    if (files[id]) files[id] = { ...files[id], name: f.name ?? files[id].name, locked: Boolean(f.locked), dormant: Boolean(f.dormant) };
+  }
+  return {
+    ...saved,
+    version: STATE_VERSION,
+    files,
+    puzzles: mergePuzzles(fresh.puzzles, saved.puzzles),
+    stats: { ...fresh.stats, ...(saved.stats ?? {}) },
+    story: { ...fresh.story, fired: saved.story?.fired ?? [] },
+    blame: fresh.blame,
+  };
+};
+
 // Returns a playable state (phase 'desktop' or 'over') or null for "start a fresh game".
 export const migrateSave = (saved, data) => {
   try {
     if (!saved || typeof saved !== 'object' || !PLAYABLE.includes(saved.phase)) return null;
     let s;
     if (saved.version === STATE_VERSION) s = saved;
+    else if (saved.version === 3) s = fromV3(saved, data);
     else if (saved.version === 2) s = fromV2(saved, data);
     else return null;
     if (!s.files || !s.puzzles || !s.clock || !s.power || !s.intern) return null;
@@ -54,7 +81,7 @@ export const migrateSave = (saved, data) => {
     if (data?.night?.power) s = { ...s, power: { ...s.power, config: createPower(data.night.power).config } };
     const { _over, ...state } = s;
     s = state;
-    if (s.phase === 'desktop' && (_over || s.clock.elapsed >= s.clock.length)) s = endShift(s, 'clock');
+    if (s.phase === 'desktop' && !s.blame?.open && (_over || s.clock.elapsed >= s.clock.length)) s = endShift(s, 'clock');
     else if (s.phase === 'desktop' && s.power.level <= 0) s = endShift(s, 'blackout');
     if (s.phase === 'over' && !s.shiftEnd) s = endShift({ ...s, phase: 'desktop' }, 'clock');
     return s;

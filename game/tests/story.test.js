@@ -7,7 +7,7 @@ import { createInitialState } from '../src/core/initialState.js';
 import { childrenOf } from '../src/core/selectors.js';
 import { shiftMinutes, validateStory } from '../src/core/story.js';
 import { canInternReadFile } from '../src/core/permissions.js';
-import { solve } from '../src/logic/puzzle.js';
+import { solveTogether } from '../src/logic/puzzle.js';
 
 const load = async (name) => JSON.parse(await readFile(new URL(`../data/${name}`, import.meta.url), 'utf8'));
 const files = await load('files.json');
@@ -25,9 +25,9 @@ const at = (s, hhmm) => {
 const fired = (s) => s.story.fired;
 const lastPost = (s) => s.intern.messages.at(-1);
 const solveWith = (s, id) => {
-  const path = solve(s.puzzles[id]);
+  const path = solveTogether(s.puzzles[id], { internTypes: s.intern.level >= 2 ? ['shl', 'shr', 'xor'] : ['shl', 'shr'] });
   for (const op of s.puzzles[id].ops.keys()) if (s.puzzles[id].ops[op].keyed) s = reducer(s, actions.enterKey(id, op, `0x${s.puzzles[id].ops[op].mask.toString(16)}`));
-  return path.reduce((acc, i) => reducer(acc, actions.applyOp(id, i)), s);
+  return path.reduce((acc, m) => reducer(acc, { ...actions.applyOp(id, m.op), actor: m.by }), s);
 };
 
 test('story.json is well formed and reveals every dormant file', () => {
@@ -137,7 +137,8 @@ test('the night escalates the intern to SUPERVISOR, who can then read the sealed
 });
 
 test('GENSET.CFG lowers the drain when recovered', () => {
-  let s = at(desktop(), '23:15');
+  // Its XOR is the intern's alone, and needs OPERATOR, so payroll comes first.
+  let s = solveWith(at(desktop(), '23:15'), 'payroll');
   s = solveWith(s, 'genset');
   assert.equal(s.puzzles.genset.solved, true);
   assert.equal(s.power.drainScale, 0.6);

@@ -1,4 +1,17 @@
 {
+  "ask": {
+    "okLines": [
+      "Fine. Running {{op}} from here. You owe me a Freddo.",
+      "{{op}}, coming down the line. Please don't make me do that again.",
+      "Typing {{op}}. My keyboard's sticky. Don't ask why.",
+      "{{op}}. Done. I think. The line went fuzzy for a second."
+    ],
+    "refusedLines": [
+      "Can't. The line says: {{reason}}",
+      "I tried. I got this back: {{reason}}",
+      "Nope. {{reason}} Not my fault. Probably."
+    ]
+  },
   "nag": {
     "everyMinutes": 30,
     "lines": [

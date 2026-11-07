@@ -25,6 +25,8 @@ export const isDoubleDown = (key) => {
 export const ui = {
   renamingId: null,
   startMenuOpen: false,
-  internStatus: 'offline', // 'offline' | 'connecting' | 'online' | 'taken' (another window has the line)
+  internStatus: 'offline', // 'offline' | 'connecting' | 'online' | 'taken' (another window has the line) | 'outdated'
+  internDriver: null, // { game, driver, text } when the intern driver is out of date
+  internWarning: null, // the driver's last "could not read your state" reason, while online
   internTyping: false,
 };

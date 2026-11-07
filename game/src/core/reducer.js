@@ -1,13 +1,14 @@
 // Pure root reducer: (state, action) => newState. No DOM, no timers, no storage.
 // Uses structural sharing so the UI can cheaply tell which slices changed.
 import { ActionTypes as T } from './actions.js';
-import { childrenOf, clockMinutes, formatClock, windowForFile } from './selectors.js';
+import { canWaitForAudit, childrenOf, clockMinutes, formatClock, windowForFile } from './selectors.js';
 import { applyOp, isSolved, opLabel } from '../logic/puzzle.js';
 import { toHex, toWord } from '../logic/bits.js';
 import { parseKey } from '../logic/words.js';
-import { clampLevel, internActionError, internLevel, isOpUnlocked, levelInfo } from './permissions.js';
+import { canActorUseOp, clampLevel, internActionError, internLevel, isOpUnlocked, levelInfo } from './permissions.js';
 import { chargePower, drainForMinutes, drainRate, isBitrotPowered } from './power.js';
 import { endShift } from './shift.js';
+import { auditDue, checkSubmission, decideBlame, suspectName } from './blame.js';
 import { advanceStory, STORY_TRIGGERS } from './story.js';
 
 const LOG_LIMIT = 100;
@@ -19,6 +20,7 @@ const WINDOW_SIZES = {
   bitrot: { w: 500, h: 420 },
   intern: { w: 380, h: 420, x: 680, y: 40 },
   geargrind: { w: 540, h: 415, x: 60, y: 40 },
+  blame: { w: 620, h: 470, x: 120, y: 30 },
 };
 
 // 8.3 filenames, DOS style. Stored upper case.
@@ -81,6 +83,7 @@ const openFile = (state, id) => {
   if (!file) return state;
   if (file.hidden || file.dormant) return alert(state, 'Open', `Cannot find '${id}'. Make sure the path and file name are correct.`);
   if (file.type === 'folder') return openWindow(state, 'explorer', id);
+  if (file.type === 'app' && file.locked) return alert(state, file.name, file.lockedMessage ?? `${file.name} cannot be opened.`);
   if (file.type === 'app' && file.app && WINDOW_SIZES[file.app]) return openWindow(state, file.app, id);
   if (file.locked && file.puzzleId && state.puzzles[file.puzzleId]) {
     const s = openWindow(state, 'bitrot', id);
@@ -131,6 +134,50 @@ const renameFile = (state, { id, name }) => {
   return s;
 };
 
+// Generator 2 parked (the audit, or waiting for it): stopped, any stall cleared.
+const parkGenerator = (state) => ({ ...state, power: { ...state.power, generator: { running: false, stalled: false, gear: 0, rpm: 0 } } });
+
+export const WAIT_PING = 'SYSADMIN is waiting for the 06:00 audit. Generator 2 parked. Clock running fast.';
+
+const waitForAudit = (state) => {
+  if (!canWaitForAudit(state)) return state;
+  let s = parkGenerator({ ...state, clock: { ...state.clock, waiting: true } });
+  s = log(s, 'All sectors recovered. Generator 2 parked. Waiting for the audit.');
+  return post(s, 'system', WAIT_PING, { ping: true });
+};
+
+// 06:00 with BLAME.EXE on the desktop: the clock stops, NS-02 freezes and the audit opens.
+const startAudit = (state) => {
+  const fileId = state.blame.config.file ?? 'blame';
+  // The day crew take Generator 2: no driving, draining or stalling during the audit.
+  let s = parkGenerator({ ...state, blame: { ...state.blame, open: true }, clock: { ...state.clock, waiting: false }, alert: null });
+  s = updateFile(s, fileId, { locked: false });
+  s = log(s, 'Head Office audit. NS-02 frozen. Generator 2 parked for the day crew. BLAME.EXE running.');
+  s = post(s, 'system', 'Head Office: 06:00. NS-02 is frozen for the audit. BLAME.EXE is open. The sysadmin and #0118 each file one statement: who did it, the file:line evidence, and why.');
+  s = post(s, 'system', AUDIT_PING, { ping: true });
+  return openFile(s, fileId);
+};
+
+export const AUDIT_PING = '06:00 AUDIT OPEN. #0118: file with submit_blame. audit_status has the suspects and your citable files.';
+
+const SIDE_NAMES = { player: 'The sysadmin', intern: '#0118' };
+
+const blameSubmit = (state, action) => {
+  const side = action.actor === 'intern' ? 'intern' : 'player';
+  if (side === 'intern' && !action.scripted && internActionError(state, action)) return state;
+  const { submission, error } = checkSubmission(state, side, action);
+  if (error) return side === 'player' ? alert(state, 'BLAME.EXE', error) : state;
+  const filed = { ...submission, ...(action.scripted ? { scripted: true } : {}), at: formatClock(clockMinutes(state)) };
+  let s = { ...state, blame: { ...state.blame, [side]: filed } };
+  s = log(s, `${SIDE_NAMES[side]} filed a statement with Head Office.`);
+  s = post(s, 'system', `BLAME.EXE: ${SIDE_NAMES[side]} has filed a statement.`);
+  if (!s.blame.player || !s.blame.intern) return s;
+  const result = decideBlame(s);
+  s = { ...s, blame: { ...s.blame, result } };
+  s = log(s, `Audit verdict: ${result.suspect ? suspectName(s.blame.config, result.suspect) : 'no one'}. ${result.ending.title}.`);
+  return endShift(s, 'audit', { ending: result.ending });
+};
+
 const bumpStat = (state, key, by = 1) => ({ ...state, stats: { ...state.stats, [key]: (state.stats?.[key] ?? 0) + by } });
 
 const applyPuzzleOp = (state, action) => {
@@ -138,18 +185,30 @@ const applyPuzzleOp = (state, action) => {
   const p = state.puzzles[puzzleId];
   const op = p?.ops[opIndex];
   if (!p || !op || p.solved || p.failed || !isOpUnlocked(p, opIndex)) return state;
+  if (state.blame?.open) return state;
   const byIntern = action.actor === 'intern';
   if (byIntern && internActionError(state, action)) return state;
+  if (!byIntern && !canActorUseOp('player', op)) return state;
   if (!isBitrotPowered(state)) return state;
+  const fileNames = Object.values(state.files).filter((f) => f.puzzleId === puzzleId);
+  const where = fileNames.map((f) => f.name).join(', ') || puzzleId;
   const value = applyOp(p.value, op);
+  // A no-op costs nothing: no move, no quota. The board flashes NO CHANGE (and the intern is told).
+  if (value === p.value) {
+    let s = updatePuzzle(state, puzzleId, { noop: { seq: (p.noop?.seq ?? 0) + 1, op: opIndex, by: byIntern ? 'intern' : 'player' } });
+    s = log(s, `${byIntern ? '#0118' : 'Sysadmin'}: ${opLabel(op)} on ${where} at ${toHex(value)}. NO CHANGE. No move used.`);
+    return byIntern ? post(s, 'system', `#0118 tried ${opLabel(op)} on ${where}: NO CHANGE (still ${toHex(value)}). No move used.`) : s;
+  }
   const history = [...p.history, p.value];
+  const by = [...(p.by ?? []), byIntern ? 'intern' : 'player'];
   const solved = isSolved(value, p);
   const failed = !solved && history.length >= p.moveLimit;
-  let s = updatePuzzle(state, puzzleId, { value, history, solved, failed });
-  const fileNames = Object.values(s.files).filter((f) => f.puzzleId === puzzleId);
+  let s = updatePuzzle(state, puzzleId, { value, history, by, solved, failed, ...(solved ? { solvedBy: by.at(-1) } : {}) });
   if (byIntern) {
-    s = bumpStat(s, 'internOps');
-    s = post(s, 'system', `#0118 applied ${opLabel(op)} to ${fileNames.map((f) => f.name).join(', ') || puzzleId}.`);
+    s = bumpStat(s, action.scripted ? 'scriptedOps' : 'internOps');
+    s = post(s, 'system', `#0118 applied ${opLabel(op)} to ${where}.`);
+  } else {
+    s = bumpStat(s, 'playerOps');
   }
   if (solved) {
     for (const f of fileNames) s = updateFile(s, f.id, { locked: false });
@@ -169,7 +228,7 @@ const applyPuzzleOp = (state, action) => {
 const enterKey = (state, action) => {
   const p = state.puzzles[action.puzzleId];
   const op = p?.ops[action.opIndex];
-  if (!p || !op?.keyed || p.solved || isOpUnlocked(p, action.opIndex)) return state;
+  if (!p || !op?.keyed || p.solved || isOpUnlocked(p, action.opIndex) || state.blame?.open) return state;
   if (action.actor === 'intern' && internActionError(state, action)) return state;
   const who = action.actor === 'intern' ? '#0118' : 'Sysadmin';
   const mask = parseKey(action.mask);
@@ -256,7 +315,7 @@ const baseReducer = (state, action) => {
         : state;
 
     case T.TICK: {
-      if (state.phase !== 'desktop') return state;
+      if (state.phase !== 'desktop' || state.blame?.open) return state;
       let minutes = Math.min(state.clock.length - state.clock.elapsed, Math.max(0, action.minutes ?? 1));
       // A long tick that runs the mainframe dry stops the clock at the blackout, not at the end.
       const rate = drainRate(state);
@@ -264,13 +323,16 @@ const baseReducer = (state, action) => {
       const elapsed = state.clock.elapsed + minutes;
       let s = drainForMinutes({ ...state, clock: { ...state.clock, elapsed } }, minutes);
       if (s.power.level <= 0) return endShift(s, 'blackout');
-      if (elapsed >= state.clock.length) return endShift(s, 'clock');
+      if (elapsed >= state.clock.length) return auditDue(s) ? startAudit(s) : endShift(s, 'clock');
       return s;
     }
 
     case T.DRIVE_REPORT:
-      if (state.phase !== 'desktop') return state;
+      if (state.phase !== 'desktop' || state.blame?.open || state.clock?.waiting) return state;
       return driveReport(state, action);
+
+    case T.WAIT_FOR_AUDIT:
+      return waitForAudit(state);
 
     case T.OPEN_FILE:
       return openFile(state, action.id);
@@ -325,18 +387,21 @@ const baseReducer = (state, action) => {
 
     case T.PUZZLE_UNDO: {
       const p = state.puzzles[action.puzzleId];
-      if (!p || p.solved || p.history.length === 0) return state;
-      return updatePuzzle(state, p.id, { value: p.history.at(-1), history: p.history.slice(0, -1), failed: false });
+      if (!p || p.solved || p.history.length === 0 || state.blame?.open) return state;
+      return updatePuzzle(state, p.id, { value: p.history.at(-1), history: p.history.slice(0, -1), by: (p.by ?? []).slice(0, p.history.length - 1), failed: false });
     }
 
     case T.PUZZLE_RESET: {
       const p = state.puzzles[action.puzzleId];
-      if (!p || p.solved) return state;
-      return updatePuzzle(state, p.id, { value: p.start, history: [], failed: false });
+      if (!p || p.solved || state.blame?.open) return state;
+      return updatePuzzle(state, p.id, { value: p.start, history: [], by: [], failed: false });
     }
 
     case T.PUZZLE_ENTER_KEY:
       return enterKey(state, action);
+
+    case T.BLAME_SUBMIT:
+      return blameSubmit(state, action);
 
     case T.CHAT_SEND:
       return chatSend(state, action);

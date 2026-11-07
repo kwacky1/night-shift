@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { isLocalSocketUrl, handleBridgeMessage, sanitiseRemoteAction, REMOTE_ACTION_TYPES, connectIntern, LINE_TAKEN_CODE, QUIET_ATTEMPTS } from '../src/bridge/api.js';
+import { isLocalSocketUrl, handleBridgeMessage, sanitiseRemoteAction, REMOTE_ACTION_TYPES, connectIntern, LINE_TAKEN_CODE, QUIET_ATTEMPTS, PROTOCOL_VERSION, WELCOME_TIMEOUT_MS, parseControl } from '../src/bridge/api.js';
 import { createStore } from '../src/core/store.js';
 import { reducer } from '../src/core/reducer.js';
 import { actions } from '../src/core/actions.js';
-import { createInitialState } from '../src/core/initialState.js';
+import { createInitialState, STATE_VERSION } from '../src/core/initialState.js';
 
 const load = async (name) => JSON.parse(await readFile(new URL(`../data/${name}`, import.meta.url), 'utf8'));
 const data = { files: await load('files.json'), puzzles: await load('puzzles.json') };
@@ -27,7 +27,12 @@ test('intern bridge only accepts local socket URLs', () => {
 });
 
 test('only a short allowlist of actions can be sent remotely', () => {
-  assert.deepEqual([...REMOTE_ACTION_TYPES].sort(), ['CHAT_SEND', 'PUZZLE_APPLY_OP', 'PUZZLE_ENTER_KEY']);
+  assert.deepEqual([...REMOTE_ACTION_TYPES].sort(), ['BLAME_SUBMIT', 'CHAT_SEND', 'PUZZLE_APPLY_OP', 'PUZZLE_ENTER_KEY']);
+  const blame = sanitiseRemoteAction({ type: 'BLAME_SUBMIT', suspect: '0117', evidence: ['readme:1'], statement: 'hi', scripted: true, actor: 'player' });
+  assert.deepEqual(blame, { type: 'BLAME_SUBMIT', suspect: '0117', evidence: ['readme:1'], statement: 'hi', actor: 'intern' });
+  for (const bad of [{ suspect: '../x' }, { suspect: 'a', evidence: 'readme:1' }, { suspect: 'a', evidence: ['readme'] }, { suspect: 'a', statement: 5 }]) {
+    assert.throws(() => sanitiseRemoteAction({ type: 'BLAME_SUBMIT', ...bad }), /Bad BLAME_SUBMIT/);
+  }
   for (const type of ['HYDRATE', 'OPEN_FILE', 'RENAME_FILE', 'PUZZLE_RESET', 'PUZZLE_UNDO', 'TICK', 'CLOCK_IN', 'constructor', '__proto__', 'toString']) {
     assert.throws(() => sanitiseRemoteAction({ type }), /not allowed remotely/, type);
   }
@@ -185,4 +190,51 @@ test('noisy state updates are coalesced, everything else is sent at once', () =>
   assert.equal(sock.sent.at(-1).state.power.generator.rpm, 3007, 'with the latest state');
   store.dispatch(actions.chatSend('hello'));
   assert.deepEqual(states(), ['DRIVE_REPORT', 'CHAT_SEND'], 'chat goes straight through');
+});
+
+test('handshake: a welcome keeps the line, a reject or silence means the driver is out of date', () => {
+  const welcomed = fakeNet();
+  const seen = [];
+  connectIntern('ws://localhost:7117', gameStore(), (s, d) => seen.push([s, d]), welcomed.opts);
+  welcomed.sockets[0].accept();
+  const hello = welcomed.sockets[0].sent[0];
+  assert.deepEqual([hello.type, hello.protocol, hello.version], ['hello', PROTOCOL_VERSION, STATE_VERSION]);
+  welcomed.sockets[0].emit('message', { data: JSON.stringify({ type: 'welcome', protocol: PROTOCOL_VERSION, version: STATE_VERSION }) });
+  welcomed.advance(WELCOME_TIMEOUT_MS * 2);
+  assert.equal(seen.at(-1)[0], 'online');
+
+  const rejected = fakeNet();
+  const r = [];
+  connectIntern('ws://localhost:7117', gameStore(), (s, d) => r.push([s, d]), rejected.opts);
+  rejected.sockets[0].accept();
+  rejected.sockets[0].emit('message', { data: JSON.stringify({ type: 'reject', reason: 'version', driver: { protocol: 2, version: 3 } }) });
+  rejected.sockets[0].drop(4003);
+  assert.equal(r.at(-1)[0], 'outdated');
+  assert.equal(r.at(-1)[1].text, `INTERN DRIVER OUT OF DATE (game v${PROTOCOL_VERSION}.${STATE_VERSION}, driver v2.3)`);
+  rejected.advance(60000);
+  assert.equal(rejected.sockets.length, 1, 'no redial loop against an old driver');
+
+  // An old driver drops our hello on the floor and never answers. That's the playtest bug.
+  const silent = fakeNet();
+  const q = [];
+  connectIntern('ws://localhost:7117', gameStore(), (s, d) => q.push([s, d]), silent.opts);
+  silent.sockets[0].accept();
+  assert.equal(q.at(-1)[0], 'online');
+  silent.advance(WELCOME_TIMEOUT_MS);
+  assert.equal(q.at(-1)[0], 'outdated');
+  assert.match(q.at(-1)[1].text, /driver older\)/);
+  silent.sockets[0].drop(1000);
+  silent.advance(60000);
+  assert.equal(silent.sockets.length, 1);
+});
+
+test('handshake: a warn from the driver shows as line noise while online', () => {
+  const net = fakeNet();
+  const seen = [];
+  connectIntern('ws://localhost:7117', gameStore(), (s, d) => seen.push([s, d]), net.opts);
+  net.sockets[0].accept();
+  net.sockets[0].emit('message', { data: JSON.stringify({ type: 'warn', reason: 'phase: too long' }) });
+  assert.deepEqual(seen.at(-1), ['online', { warning: 'phase: too long' }]);
+  assert.equal(parseControl('{"type":"dispatch"}'), null);
+  assert.equal(parseControl('junk'), null);
 });

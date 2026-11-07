@@ -24,19 +24,55 @@ export const canInternReadFile = (level, file) => Boolean(file) && (file.minLeve
 
 export const isOpUnlocked = (puzzle, opIndex) => !puzzle.ops[opIndex]?.keyed || (puzzle.unlocked ?? []).includes(opIndex);
 
+// Whose hands an op needs: 'player' (the NS-02 console only), 'intern' (the remote line only) or 'both'.
+export const HANDS = ['player', 'intern'];
+export const opHands = (op) => (HANDS.includes(op?.hands) ? op.hands : 'both');
+export const canActorUseOp = (actor, op) => opHands(op) === 'both' || opHands(op) === (actor === 'intern' ? 'intern' : 'player');
+
+// Remote ops the intern has in the current attempt (undo and reset give them back).
+export const internOpsUsed = (puzzle) => (puzzle.by ?? []).filter((who) => who === 'intern').length;
+export const internOpsLeft = (puzzle) => (Number.isInteger(puzzle.internMoves) ? Math.max(0, puzzle.internMoves - internOpsUsed(puzzle)) : Infinity);
+
+// Whose hands can make the next move on a sector, as op indexes. Not a route: just who is able.
+export const nextHands = (state, puzzle) => {
+  const usable = (actor) =>
+    puzzle.ops.map((op, i) => i).filter((i) => isOpUnlocked(puzzle, i) && canActorUseOp(actor, puzzle.ops[i]) && (actor !== 'intern' || canInternUseOp(internLevel(state), puzzle.ops[i].type)));
+  const left = internOpsLeft(puzzle);
+  return { player: usable('player'), intern: left > 0 ? usable('intern') : [], internLeft: left };
+};
+
+// A remote-only op the sysadmin has asked #0118 to run. One request per op until the sector
+// changes (the intern ran something, or undo/reset) or ASK_PENDING_MS passes.
+export const ASK_PENDING_MS = 45_000;
+export const askKey = (puzzleId, opIndex) => `${puzzleId}:${opIndex}`;
+export const askPending = (asks, puzzle, opIndex, now) => {
+  const a = asks?.get?.(askKey(puzzle.id, opIndex));
+  return Boolean(a && a.moves === puzzle.history.length && now - a.at < ASK_PENDING_MS);
+};
+
+export const AUDIT_FROZEN = 'NS-02 is frozen for the Head Office audit. No more ops tonight.';
+
 // Returns a reason string if the intern may not perform this (already sanitised) action, else null.
 export const internActionError = (state, action) => {
   const level = internLevel(state);
   const info = levelInfo(level);
+  if (action.type === 'BLAME_SUBMIT') {
+    if (!state.blame?.open) return 'There is no audit running.';
+    if (state.blame.intern) return 'You have already given your statement.';
+  }
   if (action.type === 'PUZZLE_APPLY_OP' || action.type === 'PUZZLE_ENTER_KEY') {
     const p = state.puzzles[action.puzzleId];
     const op = p?.ops[action.opIndex];
     if (!p || !op || !Object.values(state.files).some((f) => f.puzzleId === p.id && !f.dormant)) return 'No such puzzle or op.';
+    if (state.blame?.open) return AUDIT_FROZEN;
     if (isBrownout(state)) return `BROWNOUT: mainframe power is at ${Math.round(powerLevel(state))}%. The intern line can't run remote ops until the sysadmin drives the generator back up.`;
     if (!canInternUseOp(level, op.type)) return `Permission denied: ${info.name} interns cannot use ${op.type.toUpperCase()}.`;
     if (p.solved) return 'That sector is already recovered.';
     if (action.type === 'PUZZLE_APPLY_OP' && p.failed) return 'Out of moves. The sysadmin has to undo or reset.';
     if (action.type === 'PUZZLE_APPLY_OP' && !isOpUnlocked(p, action.opIndex)) return 'That op is keyed. Enter the key first.';
+    if (action.type === 'PUZZLE_APPLY_OP' && !canActorUseOp('intern', op)) return 'CONSOLE ONLY: that op needs hands on the NS-02 keyboard. Ask the sysadmin to do it.';
+    if (action.type === 'PUZZLE_APPLY_OP' && internOpsLeft(p) <= 0)
+      return `REMOTE QUOTA: Head Office allows #0118 ${p.internMoves} remote op${p.internMoves === 1 ? '' : 's'} per attempt on this sector, and you've used them. The sysadmin does the rest (an undo or reset gives them back).`;
   }
   return null;
 };
