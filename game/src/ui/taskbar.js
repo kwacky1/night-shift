@@ -1,6 +1,6 @@
 // Taskbar (start button, window buttons, tray clock), start menu and the modal alert box.
 import { actions } from '../core/actions.js';
-import { clockLabel, unreadForPlayer } from '../core/selectors.js';
+import { canWaitForAudit, clockLabel, FAST_FORWARD, isWaitingForAudit, unreadForPlayer } from '../core/selectors.js';
 import { isBrownout, powerLevel, powerStatus } from '../core/power.js';
 import { esc, ui } from './dom.js';
 import { iconSvg } from './icons.js';
@@ -20,6 +20,7 @@ export const initTaskbar = (bar, menu, ctx) => {
   bar.innerHTML = `
     <button type="button" class="start"><span class="moon">&#9790;</span>Start</button>
     <div class="tasks"></div>
+    <button type="button" class="wait-audit" hidden title="Every sector is recovered. Park the generator and run the clock fast until the 06:00 audit. There's no going back.">WAIT FOR THE AUDIT &#9193;</button>
     <div class="tray"><button type="button" class="power" title="Mainframe power. Open GEARGRIND.EXE to charge it.">PWR</button><button type="button" class="intern" title="Open INTERN.EXE">INTERN: SCRIPTED</button><span class="clock"></span></div>`;
   menu.className = 'raised';
   menu.innerHTML = `<div class="stripe">NightOS 3.11</div><ul>${MENU.map((m) =>
@@ -53,6 +54,8 @@ export const initTaskbar = (bar, menu, ctx) => {
     if (ctx.getState().files.geargrind) ctx.dispatch(actions.openFile('geargrind'));
   });
 
+  bar.querySelector('.wait-audit').addEventListener('click', () => ctx.waitForAudit?.());
+
   bar.querySelector('.tasks').addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-win]');
     if (!btn) return;
@@ -66,7 +69,13 @@ export const initTaskbar = (bar, menu, ctx) => {
 
 export const renderTaskbar = (bar, state, prev) => {
   const clock = bar.querySelector('.clock');
-  const label = clockLabel(state);
+  const label = `${clockLabel(state)}${isWaitingForAudit(state) ? ' \u23E9' : ''}`;
+  const wait = bar.querySelector('.wait-audit');
+  const waiting = isWaitingForAudit(state);
+  wait.hidden = !(canWaitForAudit(state) || waiting);
+  wait.disabled = waiting;
+  const waitText = waiting ? `WAITING \u23E9 ${FAST_FORWARD}x` : 'WAIT FOR THE AUDIT \u23E9';
+  if (wait.textContent !== waitText) wait.textContent = waitText;
   if (clock.textContent !== label) clock.textContent = label;
   const intern = bar.querySelector('.intern');
   const unread = unreadForPlayer(state);

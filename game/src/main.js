@@ -24,7 +24,7 @@ import { powerStatus } from './core/power.js';
 import { connectIntern, exposeApi, isLocalSocketUrl } from './bridge/api.js';
 import { fallbackAsk, fallbackNag, fallbackReply } from './intern/fallback.js';
 import { opLabel } from './logic/puzzle.js';
-import { unreadForPlayer } from './core/selectors.js';
+import { tickMs, unreadForPlayer } from './core/selectors.js';
 
 const SAVE_KEY = 'night-shift:save';
 const INTERN_URL_KEY = 'night-shift:intern-url';
@@ -279,14 +279,23 @@ const boot = async () => {
   };
 
   // One game minute every clock.msPerMinute real milliseconds (data/night.json).
-  const minuteMs = () => store.getState().clock.msPerMinute || DEFAULT_MS_PER_MINUTE;
+  // WAIT FOR THE AUDIT runs it FAST_FORWARD x (still one minute per tick, so every beat fires in order).
+  const minuteMs = () => tickMs(store.getState(), DEFAULT_MS_PER_MINUTE);
+  let tickTimer = 0;
   const tickLoop = () => {
     const s = store.getState();
     if (s.phase === 'desktop' && !document.hidden && !s.alert) store.dispatch(actions.tick(1));
     scriptedBlameCheck();
-    setTimeout(tickLoop, minuteMs());
+    tickTimer = setTimeout(tickLoop, minuteMs());
   };
-  setTimeout(tickLoop, minuteMs());
+  tickTimer = setTimeout(tickLoop, minuteMs());
+  ctx.waitForAudit = () => {
+    const before = store.getState();
+    store.dispatch(actions.waitForAudit());
+    if (store.getState() === before) return;
+    clearTimeout(tickTimer);
+    tickTimer = setTimeout(tickLoop, minuteMs());
+  };
 
   window.addEventListener('keydown', (e) => {
     const state = store.getState();

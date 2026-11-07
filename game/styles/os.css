@@ -338,6 +338,8 @@ button:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
 .bitrot .next { font: 11px var(--mono); color: #9fd8ae; margin: 4px 0; letter-spacing: 0.5px; }
 .blame-app .without { margin-top: 6px; }
 .blame-app .file-without { font-size: 11px; }
+#taskbar .wait-audit { white-space: nowrap; font-weight: bold; margin-right: 4px; }
+#taskbar .wait-audit[hidden] { display: none; }
 .ops button.hands-player small { color: #840; }
 .moves .remote { margin-left: auto; color: #6af; }
 .bitrot .banner.noop { display: none; background: var(--amber); color: #000; }

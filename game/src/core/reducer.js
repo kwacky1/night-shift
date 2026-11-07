@@ -1,7 +1,7 @@
 // Pure root reducer: (state, action) => newState. No DOM, no timers, no storage.
 // Uses structural sharing so the UI can cheaply tell which slices changed.
 import { ActionTypes as T } from './actions.js';
-import { childrenOf, clockMinutes, formatClock, windowForFile } from './selectors.js';
+import { canWaitForAudit, childrenOf, clockMinutes, formatClock, windowForFile } from './selectors.js';
 import { applyOp, isSolved, opLabel } from '../logic/puzzle.js';
 import { toHex, toWord } from '../logic/bits.js';
 import { parseKey } from '../logic/words.js';
@@ -134,12 +134,23 @@ const renameFile = (state, { id, name }) => {
   return s;
 };
 
+// Generator 2 parked (the audit, or waiting for it): stopped, any stall cleared.
+const parkGenerator = (state) => ({ ...state, power: { ...state.power, generator: { running: false, stalled: false, gear: 0, rpm: 0 } } });
+
+export const WAIT_PING = 'SYSADMIN is waiting for the 06:00 audit. Generator 2 parked. Clock running fast.';
+
+const waitForAudit = (state) => {
+  if (!canWaitForAudit(state)) return state;
+  let s = parkGenerator({ ...state, clock: { ...state.clock, waiting: true } });
+  s = log(s, 'All sectors recovered. Generator 2 parked. Waiting for the audit.');
+  return post(s, 'system', WAIT_PING, { ping: true });
+};
+
 // 06:00 with BLAME.EXE on the desktop: the clock stops, NS-02 freezes and the audit opens.
 const startAudit = (state) => {
   const fileId = state.blame.config.file ?? 'blame';
   // The day crew take Generator 2: no driving, draining or stalling during the audit.
-  const generator = { running: false, stalled: false, gear: 0, rpm: 0 };
-  let s = { ...state, blame: { ...state.blame, open: true }, power: { ...state.power, generator }, alert: null };
+  let s = parkGenerator({ ...state, blame: { ...state.blame, open: true }, clock: { ...state.clock, waiting: false }, alert: null });
   s = updateFile(s, fileId, { locked: false });
   s = log(s, 'Head Office audit. NS-02 frozen. Generator 2 parked for the day crew. BLAME.EXE running.');
   s = post(s, 'system', 'Head Office: 06:00. NS-02 is frozen for the audit. BLAME.EXE is open. The sysadmin and #0118 each file one statement: who did it, the file:line evidence, and why.');
@@ -317,8 +328,11 @@ const baseReducer = (state, action) => {
     }
 
     case T.DRIVE_REPORT:
-      if (state.phase !== 'desktop' || state.blame?.open) return state;
+      if (state.phase !== 'desktop' || state.blame?.open || state.clock?.waiting) return state;
       return driveReport(state, action);
+
+    case T.WAIT_FOR_AUDIT:
+      return waitForAudit(state);
 
     case T.OPEN_FILE:
       return openFile(state, action.id);

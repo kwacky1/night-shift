@@ -350,8 +350,10 @@ export const geargrindView = {
 // 06:00 audit: Generator 2 is parked for the day crew. The car stops, controls go dead and a
 // wrap-up card points at BLAME.EXE.
 const park = (body, state, c) => {
-  const parked = Boolean(state.blame?.open);
-  if (parked === Boolean(c.parked)) return;
+  const mode = state.blame?.open ? 'audit' : state.clock?.waiting ? 'waiting' : '';
+  if (mode === (c.parkMode ?? '')) return;
+  c.parkMode = mode;
+  const parked = Boolean(mode);
   c.parked = parked;
   const card = body.querySelector('.gg-parked');
   body.querySelectorAll('.gg-controls [data-ctl="up"], .gg-controls [data-ctl="down"], .gg-controls [data-ctl="clutch"]').forEach((b) => (b.disabled = parked));
@@ -361,6 +363,10 @@ const park = (body, state, c) => {
   c.clutchKey = c.clutchMouse = false;
   c.pending = { up: false, down: false };
   c.acc = { charge: 0, distance: 0, stalls: 0 };
+  if (mode === 'waiting') {
+    card.innerHTML = `<div class="card"><b>GENERATOR PARKED: WAITING FOR THE AUDIT</b><p>Every sector is recovered. The clock is running fast until 06:00.</p></div>`;
+    return;
+  }
   const w = generatorWrapUp(state);
   card.innerHTML = `<div class="card"><b>${esc(w.title)}</b>
     <dl><dt>DRIVEN</dt><dd>${esc(w.distanceKm)} km</dd><dt>STALLS</dt><dd>${esc(w.stalls)}</dd><dt>LOWEST MAINFRAME POWER</dt><dd>${esc(w.lowestPower)}%</dd></dl>

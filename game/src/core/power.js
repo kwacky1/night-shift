@@ -86,6 +86,7 @@ const curve = (table, x) => {
 // Drain per game minute right now: the base rate, scaled by the night's drain curve (keyed by minutes
 // into the shift, so the small hours bite harder) and by any story drainScale.
 export const drainRate = (state) => {
+  if (state.clock?.waiting) return 0; // generator parked, waiting for the audit
   const cfg = powerConfig(state);
   return cfg.drainPerMinute * curve(cfg.drainCurve, state.clock?.elapsed ?? 0) * (state.power?.drainScale ?? 1);
 };

@@ -24,6 +24,7 @@ export const ActionTypes = Object.freeze({
   CHAT_READ: 'CHAT_READ',
   DISMISS_ALERT: 'DISMISS_ALERT',
   DRIVE_REPORT: 'DRIVE_REPORT',
+  WAIT_FOR_AUDIT: 'WAIT_FOR_AUDIT',
   NEW_SHIFT: 'NEW_SHIFT',
 });
 
@@ -48,6 +49,7 @@ export const actions = Object.freeze({
   applyOp: (puzzleId, opIndex) => ({ type: T.PUZZLE_APPLY_OP, puzzleId, opIndex }),
   undo: (puzzleId) => ({ type: T.PUZZLE_UNDO, puzzleId }),
   resetPuzzle: (puzzleId) => ({ type: T.PUZZLE_RESET, puzzleId }),
+  waitForAudit: () => ({ type: T.WAIT_FOR_AUDIT }),
   blameSubmit: (suspect, evidence = [], statement = '') => ({ type: T.BLAME_SUBMIT, suspect, evidence, statement }),
   enterKey: (puzzleId, opIndex, mask) => ({ type: T.PUZZLE_ENTER_KEY, puzzleId, opIndex, mask }),
   // from: 'player' | 'intern'. The scripted fallback intern passes { scripted: true, topic }.

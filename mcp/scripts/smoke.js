@@ -235,15 +235,31 @@ const run = async () => {
   });
 
   // 06:00: Head Office's audit. The clock stops, BLAME.EXE opens, both sides file, a verdict ends the shift.
+  // Every sector recovered at 05:56: WAIT FOR THE AUDIT parks the generator and runs the clock 8x to 06:00.
   await page.evaluate(() => {
     const { dispatch, actions, getState } = window.NIGHT_SHIFT;
     const s = getState();
-    dispatch(actions.hydrate({ ...s, power: { ...s.power, level: 90, config: { ...s.power.config, drainPerMinute: 0 } } }));
+    dispatch(actions.hydrate({ ...s, power: { ...s.power, level: 90, config: { ...s.power.config, drainPerMinute: 0 } }, puzzles: Object.fromEntries(Object.entries(s.puzzles).filter(([id]) => id !== 'timeclk').map(([id, p]) => [id, { ...p, solved: true }]).concat([['timeclk', s.puzzles.timeclk]])) }));
     dispatch(actions.tick(420 - getState().clock.elapsed));
+    if (getState().alert) dispatch(actions.dismissAlert());
+    dispatch(actions.tick(476 - getState().clock.elapsed));
+    if (getState().alert) dispatch(actions.dismissAlert());
   });
   expect(/no audit running/.test(await tool('audit_status')), 'no audit before 06:00');
-  await page.evaluate(() => window.NIGHT_SHIFT.dispatch(window.NIGHT_SHIFT.actions.tick(480 - window.NIGHT_SHIFT.getState().clock.elapsed)));
-  await page.waitForSelector('.blame-app .blame-form:not([hidden])');
+  expect(await page.isHidden('#taskbar .wait-audit'), 'no WAIT FOR THE AUDIT button while a sector is still corrupted');
+  await page.evaluate(() => {
+    const { dispatch, actions, getState } = window.NIGHT_SHIFT;
+    const s = getState();
+    dispatch(actions.hydrate({ ...s, puzzles: { ...s.puzzles, timeclk: { ...s.puzzles.timeclk, solved: true } } }));
+  });
+  await page.waitForSelector('#taskbar .wait-audit:not([hidden])');
+  await page.click('#taskbar .wait-audit');
+  await page.waitForSelector('.gg-parked:not([hidden])');
+  const ff = await page.evaluate(() => ({ running: window.NIGHT_SHIFT.getState().power.generator.running, waiting: window.NIGHT_SHIFT.getState().clock.waiting, label: document.querySelector('#taskbar .wait-audit').textContent, card: document.querySelector('.gg-parked').textContent }));
+  expect(/WAITING FOR THE AUDIT/.test(ff.card) && !ff.running && ff.waiting && /WAITING/.test(ff.label), 'WAIT FOR THE AUDIT parks Generator 2 and the clock runs fast', 'WAIT FOR THE AUDIT parks Generator 2', ff.card);
+  expect(/waiting for the 06:00 audit/.test(await tool('read_messages')), 'the intern hears the sysadmin is waiting for the audit');
+  await page.waitForSelector('.blame-app .blame-form:not([hidden])', { timeout: 15000 });
+  ok('the clock runs fast to 06:00 and BLAME.EXE opens');
   expect(await page.evaluate(() => window.NIGHT_SHIFT.getState().phase === 'desktop' && window.NIGHT_SHIFT.getState().blame.open), 'at 06:00 the clock freezes and BLAME.EXE opens');
   const auditView = await tool('audit_status');
   expect(/"suspects"/.test(auditView) && /BOOTLOG\.TXT/.test(auditView) && !/points|weight|endings/.test(auditView), 'audit_status: suspects and files read, no verdict rules', auditView);
