@@ -4,7 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = resolve(fileURLToPath(new URL('../game/', import.meta.url)));
+// SERVE_ROOT serves another folder, e.g. the itch.io build in dist/html.
+const root = resolve(process.env.SERVE_ROOT || fileURLToPath(new URL('../game/', import.meta.url)));
 const port = Number(process.env.PORT) || 8080;
 // no-store on everything, so a plain refresh always picks up edited ES modules.
 const noStore = { 'Cache-Control': 'no-store' };
