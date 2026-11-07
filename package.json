@@ -11,7 +11,8 @@
     "mcp": "node mcp/bin/night-shift-mcp.js",
     "smoke": "node mcp/scripts/smoke.js",
     "build": "node scripts/build.js",
-    "verify-pack": "node scripts/verify-pack.js"
+    "verify-pack": "node scripts/verify-pack.js",
+    "screenshots": "node scripts/screenshots.js"
   },
   "engines": {
     "node": ">=20"
