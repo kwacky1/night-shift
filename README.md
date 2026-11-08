@@ -8,7 +8,7 @@ A [GitHub Game Off 2026](https://itch.io/jam/game-off-2026) entry for the theme 
 
 **https://goosey-games.itch.io/night-shift** (in the browser; the slug may still change before launch)
 
-Want a real AI as your intern? Add `npx -y night-shift-mcp` to your agent's MCP config and click **Dial** in INTERN.EXE. See [Connect your intern](#connect-your-intern).
+Want a real AI as your intern? Add `npx -y @kwacky1/night-shift-mcp` to your agent's MCP config and click **Dial** in INTERN.EXE. See [Connect your intern](#connect-your-intern).
 
 ## Concept
 
@@ -22,7 +22,7 @@ A fake retro operating system you navigate with Shift-click, Shift-drag and rena
 ## Tech
 
 - `game/`: browser game (HTML/CSS/JS ES modules, no engine). `npm run build` copies it into `dist/html/` for itch.io; there's no bundling or transpiling.
-- `mcp/`: Node MCP server ([`night-shift-mcp`](mcp/README.md) on npm) that talks to the game over `ws://localhost`
+- `mcp/`: Node MCP server ([`@kwacky1/night-shift-mcp`](mcp/README.md) on npm) that talks to the game over `ws://localhost`
 
 ## Running it
 
@@ -117,7 +117,7 @@ The intern is badge #0118. Plug in any MCP-capable agent and it plays #0118 for 
 
 ### 1. Tell your agent about it
 
-You need Node 20+. Your agent starts the server itself with `npx -y night-shift-mcp` ([npm package](mcp/README.md)). It speaks MCP over stdio and opens a WebSocket for the game on `127.0.0.1:7117`.
+You need Node 20+. Your agent starts the server itself with `npx -y @kwacky1/night-shift-mcp` ([npm package](https://www.npmjs.com/package/@kwacky1/night-shift-mcp)). It speaks MCP over stdio and opens a WebSocket for the game on `127.0.0.1:7117`.
 
 **GitHub Copilot CLI**: `~/.copilot/mcp-config.json` (or `/mcp add`)
 
@@ -127,7 +127,7 @@ You need Node 20+. Your agent starts the server itself with `npx -y night-shift-
     "night-shift": {
       "type": "local",
       "command": "npx",
-      "args": ["-y", "night-shift-mcp"],
+      "args": ["-y", "@kwacky1/night-shift-mcp"],
       "tools": ["*"]
     }
   }
@@ -142,7 +142,7 @@ You need Node 20+. Your agent starts the server itself with `npx -y night-shift-
     "night-shift": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "night-shift-mcp"]
+      "args": ["-y", "@kwacky1/night-shift-mcp"]
     }
   }
 }
@@ -155,7 +155,7 @@ You need Node 20+. Your agent starts the server itself with `npx -y night-shift-
   "mcpServers": {
     "night-shift": {
       "command": "npx",
-      "args": ["-y", "night-shift-mcp"]
+      "args": ["-y", "@kwacky1/night-shift-mcp"]
     }
   }
 }
@@ -189,8 +189,7 @@ On Windows, use escaped backslashes in JSON paths (`"C:\\code\\night-shift\\mcp\
 
 Open **INTERN.EXE** (desktop, Start menu or the `INTERN:` tray button), check the address (`ws://localhost:7117`) and click **Dial**. The tray shows `INTERN: ONLINE` when the agent is on the line. Locally you can also load `http://localhost:8080/?intern=ws://localhost:7117`. The game remembers the address and quietly redials it whenever the game loads (a few tries with backoff). If nothing answers, the scripted intern stays on duty. A dial you make yourself tries up to 5 times (backing off from 1 s to 10 s), then shows **DIAL FAILED** with a **Retry** button rather than dialling forever. Inside a frame (itch.io) it gives up after the first failure; see below.
 
-The game and the driver check each other's protocol and state version on `hello`. If they don't match (say you updated the game but your agent is still running an old `night-shift-mcp`), the line is refused out loud: INTERN.EXE and the tray say **INTERN DRIVER OUT OF DATE (game vN, driver vM)** / `DRIVER OLD`, and every tool tells the agent the same. Update the server (
-px -y night-shift-mcp@latest, or restart it from the same checkout as the game) and Redial. A state message the driver can't read shows **LINE NOISE** rather than going quietly deaf.
+The game and the driver check each other's protocol and state version on `hello`. If they don't match (say you updated the game but your agent is still running an old `night-shift-mcp`), the line is refused out loud: INTERN.EXE and the tray say **INTERN DRIVER OUT OF DATE (game vN, driver vM)** / `DRIVER OLD`, and every tool tells the agent the same. Update the server (`npx -y @kwacky1/night-shift-mcp@latest`, or restart it from the same checkout as the game) and Redial. A state message the driver can't read shows **LINE NOISE** rather than going quietly deaf.
 
 Only one game window can hold the line. If you open the game in a second tab, that tab takes the line and the first one shows **LINE TAKEN BY ANOTHER TERMINAL** in INTERN.EXE and the tray, with a **Redial** button to take it back.
 
@@ -265,7 +264,7 @@ game/
     bridge/line.js    framed detection, DIAL FAILED / LINE BLOCKED wording, OPEN IN ITS OWN TAB url
     main.js           wires store to UI; timers and saving live here, not in the reducer
   tests/              node:test suites
-mcp/                  night-shift-mcp (npm workspace, published to npm)
+mcp/                  @kwacky1/night-shift-mcp (npm workspace, published to npm)
   bin/                CLI entry: runs src/ in a clone, the bundle in dist/ when installed from npm
   src/
     server.js         McpServer, persona instructions, CLI flags
@@ -280,7 +279,7 @@ mcp/                  night-shift-mcp (npm workspace, published to npm)
 scripts/
   serve.js            tiny static dev server (SERVE_ROOT to serve another folder)
   build.js            npm run build: game/ -> dist/html/ for itch.io, relative paths checked
-  verify-pack.js      npm run verify-pack: pack + install night-shift-mcp, smoke the tarball
+  verify-pack.js      npm run verify-pack: pack + install @kwacky1/night-shift-mcp, smoke the tarball
   screenshots.js      npm run screenshots: the itch.io page images in docs/itch/
   balance.js          plays a night with scripted drivers and prints the power table
 docs/
@@ -368,7 +367,7 @@ It's a straight copy of `game/` minus the tests, and it fails if any `src`, `hre
 
 The first time, create the itch.io project (Kind: HTML) before the upload, then tick **This file will be played in the browser** on the `html` upload and set the embed size. Suggested settings and the page copy are in [`docs/itch/page.md`](docs/itch/page.md). `npm run screenshots` retakes the page images.
 
-### Publishing night-shift-mcp to npm
+### Publishing @kwacky1/night-shift-mcp to npm
 
 `mcp/src` imports the game's rules from `../game/src`, which doesn't exist in an npm install. So `prepack` (`mcp/scripts/bundle.js`) bundles `src/server.js` and the game modules it uses into `mcp/dist/server.js` with esbuild (npm deps stay external), and the package ships only `bin/`, `dist/`, `README.md` and `LICENSE`. The bin runs `src/` when it finds the game next door (a clone: tests and the smoke always use the live source) and `dist/` otherwise. `mcp/dist/` is gitignored.
 
@@ -381,7 +380,7 @@ The first time, create the itch.io project (Kind: HTML) before the upload, then 
 1. **Week 1:** OS shell + first Bit Rot puzzle *(done: playable slice in `game/`)*
 2. **Week 2:** MCP bridge, two-way play working *(done: `night-shift-mcp`, INTERN.EXE, clearance, BADGE.DB)*
 3. **Week 3:** Gear Grind power mechanic + story arc *(done: GEARGR~1.EXE, mainframe power and brownouts, the night's story, SUPERVISOR clearance, end-of-shift screen)*
-4. **Week 4:** blame-game finale and intern balance *(milestone 1: BLAME.EXE, two pairs of hands, NO CHANGE, the version handshake)*; shipping *(milestone 4: the itch.io build and CI upload, `night-shift-mcp` on npm, page copy, screenshots and the AI disclosure)*; audio and polish still to come (milestones 2 and 3)
+4. **Week 4:** blame-game finale and intern balance *(milestone 1: BLAME.EXE, two pairs of hands, NO CHANGE, the version handshake)*; shipping *(milestone 4: the itch.io build and CI upload, `@kwacky1/night-shift-mcp` on npm, page copy, screenshots and the AI disclosure)*; audio and polish still to come (milestones 2 and 3)
 
 Deadline: 1 December 2026, 13:37 PST.
 

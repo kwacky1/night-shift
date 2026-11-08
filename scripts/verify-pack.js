@@ -37,6 +37,10 @@ const main = async () => {
     // prepack's own output comes first on stdout; the JSON report is the last thing printed.
     const out = npm(`pack --workspace mcp --json --pack-destination "${tmp}"`, repo);
     const [packed] = JSON.parse(out.slice(out.search(/^\[/m)));
+    const { name: pkgName } = JSON.parse(await readFile(join(repo, 'mcp', 'package.json'), 'utf8'));
+    // npm names a scoped tarball @scope/name -> scope-name-<version>.tgz.
+    const expectedTgz = `${pkgName.replace(/^@/, '').replace('/', '-')}-${packed.version}.tgz`;
+    if (packed.filename !== expectedTgz) fail(`Packed ${packed.filename}, expected ${expectedTgz}`);
     const tarball = join(tmp, packed.filename);
     console.log(`  ${packed.filename}: ${packed.files.length} files, ${(packed.size / 1024).toFixed(1)} KB`);
     for (const f of packed.files) console.log(`    ${f.path}`);
@@ -47,7 +51,9 @@ const main = async () => {
     console.log('\n# npm install <tarball> into a fresh project');
     npm(`install "${tarball}" --no-audit --no-fund --loglevel=error`, project);
 
-    const pkgDir = join(project, 'node_modules', 'night-shift-mcp');
+    const pkgDir = join(project, 'node_modules', ...pkgName.split('/'));
+    const binLink = join(project, 'node_modules', '.bin', process.platform === 'win32' ? 'night-shift-mcp.cmd' : 'night-shift-mcp');
+    if (!existsSync(binLink)) fail(`Installing ${pkgName} didn't link the night-shift-mcp bin`);
     const files = await walk(pkgDir);
     const rel = files.map((f) => relative(pkgDir, f).replaceAll('\\', '/'));
     if (rel.some((f) => f.startsWith('src/') || f.startsWith('tests/') || f.startsWith('scripts/'))) fail(`Package ships dev files:\n  ${rel.join('\n  ')}`);

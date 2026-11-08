@@ -1,7 +1,7 @@
 // The game side of the intern bridge.
 //
 // 1. window.NIGHT_SHIFT exposes the same store API the UI uses (handy from DevTools too).
-// 2. connectIntern() opens an optional WebSocket to the local MCP server (`npx night-shift-mcp`).
+// 2. connectIntern() opens an optional WebSocket to the local MCP server (`npx -y @kwacky1/night-shift-mcp`).
 //    It is used when the page is loaded with ?intern=ws://localhost:PORT or when the player dials
 //    in from INTERN.EXE. Only localhost URLs are accepted. Protocol (JSON messages, protocol 3):
 //      game -> bridge  { type: 'hello', protocol, version, state }        version = STATE_VERSION
