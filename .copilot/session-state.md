@@ -1,11 +1,12 @@
 # Session state - NIGHT_SHIFT.EXE
 
-_Last updated: week 4, intern line fallback on itch_
+_Last updated: week 4, scoped npm package name_
 
 ## Status
 - Weeks 1 to 3 are merged to `main`, and so are week 4 PRs #1 to #5 (itch CI upload via butler works; page is goosey-games.itch.io/night-shift, draft).
 - Branch `kwacky1-intern-line-fallback-on-itch`: INTERN.EXE handles the itch iframe (see below). PR open against `main`.
 - Tests: `npm test` runs 264 game + MCP tests. `npm run smoke` passes 81 E2E checks in headless Chrome (both finales, a driver mismatch and the itch frame included).
+- Branch `kwacky1-scoped-npm-package-name`: npm refused `night-shift-mcp` (too close to `nightshift-mcp`), so the package is now **`@kwacky1/night-shift-mcp`** with `publishConfig.access: public`. The bin and MCP server name stay `night-shift-mcp`; `npx -y @kwacky1/night-shift-mcp` runs it. Docs, the DIAL FAILED hint and the itch page copy use the scoped name. `verify-pack` checks the tarball is `kwacky1-night-shift-mcp-<ver>.tgz`, installs to `node_modules/@kwacky1/night-shift-mcp` and that the bin is linked. PR open against `main`. Not published.
 - Milestones 2 and 3 (audio, polish) are still proposed below. Ask Simon before starting each one.
 
 ## Intern line on itch.io
@@ -26,7 +27,7 @@ _Last updated: week 4, intern line fallback on itch_
 - **npm**: `mcp/scripts/bundle.js` (esbuild, `prepack`) bundles `src/server.js` + the game modules into `mcp/dist/server.js` (gitignored). The bin runs `src/` when `../game/src` exists (clone, tests, smoke) and `dist/` otherwise. Package ships bin, dist, README.md, LICENSE. `npm run verify-pack` packs, installs into a temp project, checks for `../game` imports and runs the full smoke with `SMOKE_MCP_BIN`. A test keeps `VERSION` in server.js equal to `mcp/package.json`. Not published yet.
 - **Docs**: `docs/itch/page.md` (blurb, controls, npx config, credits, itch settings: HTML, 1024x768, fullscreen button on, mobile off), `docs/ai-disclosure.md`, `mcp/README.md` (npm page). README: Play section, npx-first Connect your intern, Building and releasing.
 - **Screenshots**: `npm run screenshots` (`scripts/screenshots.js`) shoots `docs/itch/0[1-5]-*.png` at 1280x720 and `cover.png` at 630x500 with a real MCP client on the line; it refuses to shoot if a key value or ending text is on screen. Uses GENSET.CFG for Bit Rot (PAYROLL.DAT's title shows the badge key).
-- **Simon to do**: create the itch.io project, add `ITCH_TOKEN` (and `ITCH_GAME` if the slug differs), tick 'played in the browser' after the first upload, `npm publish` night-shift-mcp, submit to Game Off before 1 Dec 13:37 PST with `docs/ai-disclosure.md`.
+- **Simon to do**: create the itch.io project, add `ITCH_TOKEN` (and `ITCH_GAME` if the slug differs), tick 'played in the browser' after the first upload, `npm publish` from mcp/ (scoped `@kwacky1/night-shift-mcp`, public via publishConfig), update the itch page's Connect your own AI intern snippet from `docs/itch/page.md`, submit to Game Off before 1 Dec 13:37 PST with `docs/ai-disclosure.md`.
 
 ## Week 4 milestone 1 summary
 - **State v4**: puzzles gain `by` (who made each move), `internMoves`, `noop`, `solvedBy`; ops gain `hands`; new `blame` slice; stats `playerOps`/`internOps`/`scriptedOps`. `migrateSave` (`fromV3`) refreshes definitions and keeps progress (old moves count as the player's). PROTOCOL_VERSION 3.

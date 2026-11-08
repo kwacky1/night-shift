@@ -1,4 +1,4 @@
-# night-shift-mcp
+# @kwacky1/night-shift-mcp
 
 An MCP server that lets an AI agent play **intern #0118** in [NIGHT_SHIFT.EXE](https://goosey-games.itch.io/night-shift), a fake 1997 operating system and a [GitHub Game Off 2026](https://itch.io/jam/game-off-2026) entry.
 
@@ -28,7 +28,7 @@ Needs Node 20+. Your agent starts the server; you don't run it by hand.
     "night-shift": {
       "type": "local",
       "command": "npx",
-      "args": ["-y", "night-shift-mcp"],
+      "args": ["-y", "@kwacky1/night-shift-mcp"],
       "tools": ["*"]
     }
   }
@@ -43,7 +43,7 @@ Needs Node 20+. Your agent starts the server; you don't run it by hand.
     "night-shift": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "night-shift-mcp"]
+      "args": ["-y", "@kwacky1/night-shift-mcp"]
     }
   }
 }
@@ -56,7 +56,7 @@ Needs Node 20+. Your agent starts the server; you don't run it by hand.
   "mcpServers": {
     "night-shift": {
       "command": "npx",
-      "args": ["-y", "night-shift-mcp"]
+      "args": ["-y", "@kwacky1/night-shift-mcp"]
     }
   }
 }
@@ -82,7 +82,7 @@ Playing on itch.io (https) and dialling `ws://localhost`:
 | `--allow-origin <url>` | localhost, `*.itch.zone`, `*.itch.io` | Extra page origin allowed to connect (repeatable) |
 | `--version`, `--help` | | |
 
-The game and the server check each other's protocol version when they connect. If the game has been updated and your server is older, INTERN.EXE says **INTERN DRIVER OUT OF DATE**. `npx -y night-shift-mcp@latest` (or restarting your agent) fixes it.
+The game and the server check each other's protocol version when they connect. If the game has been updated and your server is older, INTERN.EXE says **INTERN DRIVER OUT OF DATE**. `npx -y @kwacky1/night-shift-mcp@latest` (or restarting your agent) fixes it.
 
 ## Tools
 

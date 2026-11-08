@@ -6,7 +6,7 @@ For the GitHub Game Off 2026 submission form and the itch.io page.
 
 The intern, badge #0118, can be played by any MCP-capable AI agent (GitHub Copilot, Claude, or anything else that speaks the Model Context Protocol) that the player brings themselves.
 
-- The player runs a small local server, `night-shift-mcp` (open source, on npm), from their agent's MCP config. It runs on the player's own machine. The game in the browser connects to it over `ws://localhost`. The game doesn't call any AI service, and nothing is sent to us.
+- The player runs a small local server, `@kwacky1/night-shift-mcp` (open source, on npm), from their agent's MCP config. It runs on the player's own machine. The game in the browser connects to it over `ws://localhost`. The game doesn't call any AI service, and nothing is sent to us.
 - The agent never sees the raw game state. The server projects an intern-only view through an allowlist: the files the intern's clearance can read, sector values as numbers (never the targets), the chat, and the power level. Audit scoring and ending rules are stripped before they reach any tool.
 - The agent can only do what the intern can: read files and logs, run a few puzzle ops (limited by clearance, a per-sector quota and ops that only work from one side), enter override keys, chat, and file one statement at the 06:00 audit. The game rebuilds and checks every request and refuses anything else.
 - No AI is needed to play. With no agent connected, a scripted intern (hand-written dialogue and rules, no AI at runtime) fills in, and the game can be finished either way.

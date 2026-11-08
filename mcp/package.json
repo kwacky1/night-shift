@@ -1,5 +1,5 @@
 {
-  "name": "night-shift-mcp",
+  "name": "@kwacky1/night-shift-mcp",
   "version": "0.2.0",
   "description": "MCP server that lets an AI agent play the intern in NIGHT_SHIFT.EXE",
   "keywords": [
@@ -38,6 +38,9 @@
     "smoke": "node scripts/smoke.js",
     "bundle": "node scripts/bundle.js",
     "prepack": "node scripts/bundle.js"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "engines": {
     "node": ">=20"

@@ -50,7 +50,7 @@ export const dialFailure = ({ framed = false, permission = null, attempts = 1 } 
   const tries = attempts === 1 ? '1 try' : `${attempts} tries`;
   return {
     title: 'DIAL FAILED',
-    text: `No answer after ${tries}. Is night-shift-mcp running (npx night-shift-mcp, or your agent's MCP config)?`,
+    text: `No answer after ${tries}. Is night-shift-mcp running (npx -y @kwacky1/night-shift-mcp, or your agent's MCP config)?`,
     hint:
       permission === 'denied'
         ? `Your browser is blocking this page from the local network. Allow '${ALLOW_PROMPT}' in the site settings (padlock), then Retry.`

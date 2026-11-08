@@ -58,7 +58,7 @@ test('dialFailure top-level: DIAL FAILED, no own-tab button, hint follows the pe
   assert.equal(f.title, 'DIAL FAILED');
   assert.equal(f.openTab, false);
   assert.match(f.text, /5 tries/);
-  assert.match(f.text, /night-shift-mcp/);
+  assert.match(f.text, /npx -y @kwacky1\/night-shift-mcp/);
   assert.match(dialFailure({ attempts: 1 }).text, /1 try\b/);
   assert.match(dialFailure({ permission: 'denied' }).hint, /blocking this page.*site settings/);
   assert.doesNotMatch(dialFailure({ permission: 'prompt' }).hint, /blocking/);

@@ -48,13 +48,13 @@ You need Node 20+ and an MCP-capable agent. Add this to your agent's MCP config:
   "mcpServers": {
     "night-shift": {
       "command": "npx",
-      "args": ["-y", "night-shift-mcp"]
+      "args": ["-y", "@kwacky1/night-shift-mcp"]
     }
   }
 }
 ```
 
-(VS Code uses `"servers"` with `"type": "stdio"`; Copilot CLI wants `"type": "local"` and `"tools": ["*"]`. Full configs: https://www.npmjs.com/package/night-shift-mcp)
+(VS Code uses `"servers"` with `"type": "stdio"`; Copilot CLI wants `"type": "local"` and `"tools": ["*"]`. Full configs: https://www.npmjs.com/package/@kwacky1/night-shift-mcp)
 
 Tell your agent something like *"You're the intern in NIGHT_SHIFT.EXE. Clock in and help me."* Then in the game open **INTERN.EXE**, leave the address as `ws://localhost:7117` and click **Dial**.
 
